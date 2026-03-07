@@ -1,64 +1,36 @@
-import { useBooking } from '../context/BookingContext';
+import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { isAuthenticated, currentUser, setPage, logout } = useBooking();
+  const { page, setPage, cartCount } = useApp();
+
+  const navLinks = ['Home', 'Varieties', 'Pickup Locations', 'About Us', 'Contact Us'];
 
   return (
-    <navbar className="navbar">
-      <div
-        className="navbar-brand"
-        onClick={() => setPage('home')}
-        style={{ cursor: 'pointer' }}
-      >
-        🚛 LorryHub
-      </div>
+    <>
+      <div className="topbar">🥭 Fresh Indian Mangoes Air-Flown to Singapore — Free delivery over $120</div>
 
-      <div className="navbar-nav">
-        {isAuthenticated ? (
-          <>
-            <button className="navbar-link" onClick={() => setPage('booking')}>
-              📦 Book Now
+<nav className="nav">
+        <div className="nav-inner">
+          <div className="logo" onClick={() => setPage('home')}>{'🌿 Garden'}<span>{'Roots'}</span></div>
+          <ul className="nav-links">
+            {navLinks.map(l => (
+              <li key={l}>
+                <a href="#" onClick={e => { e.preventDefault(); setPage(l.toLowerCase().replace(/ /g, '-')); }}>
+                  {l}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <div className="nav-actions">
+            <button className="cart-btn" onClick={() => setPage('cart')}>
+              🛒
+              {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
             </button>
-            <button className="navbar-link" onClick={() => setPage('myBookings')}>
-              📋 My Bookings
-            </button>
-            <button className="navbar-link" onClick={() => setPage('profile')}>
-              👤 Profile
-            </button>
-
-            <div className="profile-menu">
-              <div className="profile-avatar" title={currentUser?.name}>
-                {currentUser?.name?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <button
-                className="navbar-link"
-                onClick={logout}
-                style={{ marginLeft: '8px' }}
-              >
-                Logout
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <button className="navbar-link" onClick={() => setPage('login')}>
-              🔑 Login
-            </button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => setPage('signup')}
-            >
-              Sign Up
-            </button>
-          </>
-        )}
-      </div>
-
-      <button className="hamburger" style={{ marginLeft: 'auto' }}>
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
-    </navbar>
+            <button className="btn-outline">Login</button>
+            <button className="btn-primary">Sign Up</button>
+          </div>
+        </div>
+      </nav>
+    </>
   );
 }

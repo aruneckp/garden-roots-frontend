@@ -1,11 +1,5 @@
-import { BookingProvider } from './context/BookingContext';
-import BookingApp from './BookingApp';
-import './styles/main.css';
+import MangoStore from './MangoStore';
 
 export default function App() {
-  return (
-    <BookingProvider>
-      <BookingApp />
-    </BookingProvider>
-  );
+  return <MangoStore />;
 }

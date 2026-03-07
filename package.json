@@ -1,5 +1,5 @@
 {
-  "name": "lorry_booking_app",
+  "name": "garden-roots-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-google-maps/api": "^2.20.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
