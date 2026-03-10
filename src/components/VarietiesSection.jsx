@@ -1,8 +1,9 @@
 import { useApp } from '../context/AppContext';
-import { varieties } from '../data/varieties';
+import { varieties as fallbackVarieties } from '../data/varieties';
 
 export default function VarietiesSection() {
-  const { addToCart } = useApp();
+  const { addToCart, products, loadingProducts } = useApp();
+  const varietiesToShow = products.length > 0 ? products : fallbackVarieties;
 
   return (
     <section className="section" id="varieties">
@@ -11,7 +12,7 @@ export default function VarietiesSection() {
         <h2 className="section-title">Mango Varieties</h2>
         <p className="section-sub">Each variety tells a story of its origin — a distinct personality, sweetness, and aroma.</p>
         <div className="varieties-grid">
-          {varieties.map(v => (
+          {varietiesToShow.map(v => (
             <div className="variety-card" key={v.id}>
               <div className="variety-img" style={{ height: v.imgHeight || 180 }}>
                 {v.image

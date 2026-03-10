@@ -1,16 +1,123 @@
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { orderApi, paymentApi } from '../services/api';
 
 export default function Checkout() {
   const {
     cart, cartTotal, delivery,
-    paymentMethod, setPaymentMethod,
-    cardForm, setCardForm,
     payState, setPayState,
-    orderRef, setCart,
-    formatCardNumber, formatExpiry,
-    handlePay, setPage,
-    paynowQrUrl, cancelPaynow,
+    orderRef, setOrderRef, setCart, setToast, setPage,
+    paynowQrUrl, setPaynowQrUrl, paynowPiId, setPaynowPiId, cancelPaynow,
   } = useApp();
+
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: ''
+  });
+  const [currentOrderId, setCurrentOrderId] = useState(null);
+  const paynowPollRef = useRef(null);
+
+  useEffect(() => () => { if (paynowPollRef.current) clearInterval(paynowPollRef.current); }, []);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleCreateOrder = async () => {
+    try {
+      const { name, email, phone, address } = customerForm;
+      if (!name.trim() || !email.trim() || !phone.trim() || !address.trim()) {
+        showToast('Please fill in all required fields');
+        return null;
+      }
+
+      const orderItems = cart.map(item => ({
+        product_variant_id: item.variantId ?? item.id,
+        quantity: item.qty
+      }));
+
+      const resp = await orderApi.createOrder({
+        items: orderItems,
+        customerName: customerForm.name,
+        customerEmail: customerForm.email,
+        customerPhone: customerForm.phone,
+        deliveryAddress: customerForm.address,
+        paymentMethod: 'paynow'
+      });
+      const orderData = resp?.data ?? resp;
+      return orderData;
+    } catch (err) {
+      showToast(`Order creation failed: ${err.message}`);
+      console.error(err);
+      return null;
+    }
+  };
+
+  // Called when polling detects 'succeeded'
+  const finalisePayment = async (orderId, intentId) => {
+    if (paynowPollRef.current) clearInterval(paynowPollRef.current);
+    try {
+      const confirmResult = await paymentApi.confirmPayment(orderId, intentId);
+      const confirmData = confirmResult?.data ?? confirmResult;
+      if (confirmData.order_ref) {
+        setOrderRef(confirmData.order_ref);
+      }
+      setPayState('success');
+    } catch (confirmErr) {
+      showToast(`Order confirmation failed: ${confirmErr.message}`);
+      console.error('Payment confirmation error:', confirmErr);
+      setPayState('idle');
+    }
+  };
+
+  const handlePayment = async () => {
+    const order = await handleCreateOrder();
+    if (!order) return;
+
+    setCurrentOrderId(order.id);
+    setPayState('processing');
+    try {
+      const resp = await paymentApi.createPayment(
+        cartTotal + delivery,
+        `Garden Roots Order GR-${order.id}`,
+        order.id
+      );
+      const data = resp?.data ?? resp;
+
+      if (!data.payment_intent_id) {
+        showToast('Error: Payment intent ID not received from server');
+        setPayState('idle');
+        return;
+      }
+
+      setPaynowQrUrl(data.qr_url);
+      setPaynowPiId(data.payment_intent_id);
+      setPayState('qr_shown');
+
+      // Poll every 3s — catches webhook-driven status updates in production
+      paynowPollRef.current = setInterval(async () => {
+        try {
+          const r = await paymentApi.getPaymentStatus(data.payment_intent_id);
+          const d = r?.data ?? r;
+          if (d.status === 'succeeded') {
+            // Webhook already marked it — finalise the order
+            await finalisePayment(order.id, data.payment_intent_id);
+          } else if (d.status === 'expired' || d.status === 'requires_payment_method') {
+            clearInterval(paynowPollRef.current);
+            setPaynowQrUrl(null);
+            setPaynowPiId(null);
+            setPayState('expired');
+          }
+        } catch (_) { /* network glitch — keep polling */ }
+      }, 3000);
+    } catch (err) {
+      showToast(`Payment error: ${err.message}`);
+      setPayState('idle');
+    }
+  };
 
   return (
     <div className="checkout-page">
@@ -30,7 +137,7 @@ export default function Checkout() {
                   <div className="checkout-item-qty">Qty: {item.qty}</div>
                 </div>
               </div>
-              <div className="checkout-item-price">${parseInt(item.price.replace('$', '')) * item.qty}</div>
+              <div className="checkout-item-price">${parseFloat(item.price.replace('$', '')) * item.qty}</div>
             </div>
           ))}
           <hr className="checkout-divider" />
@@ -42,7 +149,7 @@ export default function Checkout() {
         {/* Payment */}
         <div className="payment-card">
           <div className="payment-card-header">
-            <h3>Payment Method</h3>
+            <h3>Delivery & Payment</h3>
           </div>
 
           {payState === 'success' ? (
@@ -77,10 +184,10 @@ export default function Checkout() {
                   1. Open your banking app (DBS/OCBC/UOB…)<br />
                   2. Select PayNow → Scan QR<br />
                   3. Verify amount: <strong>${cartTotal + delivery} SGD</strong><br />
-                  4. This page updates automatically once payment is received
+                  4. Page updates automatically once payment is received
                 </div>
                 <div className="paynow-polling-status">
-                  <span className="polling-dot" />Waiting for payment…
+                  <span className="polling-dot" />Waiting for payment confirmation…
                 </div>
                 <button className="btn-continue" onClick={cancelPaynow}>← Cancel</button>
               </div>
@@ -98,77 +205,60 @@ export default function Checkout() {
             </div>
           ) : (
             <>
-              <div className="payment-tabs">
-                <button className={`payment-tab${paymentMethod === 'card' ? ' active' : ''}`} onClick={() => setPaymentMethod('card')}>
-                  <span className="payment-tab-icon">💳</span>Card
-                </button>
-                <button className={`payment-tab${paymentMethod === 'paynow' ? ' active' : ''}`} onClick={() => setPaymentMethod('paynow')}>
-                  <span className="payment-tab-icon">📱</span>PayNow
-                </button>
-                <button className={`payment-tab${paymentMethod === 'grabpay' ? ' active' : ''}`} onClick={() => setPaymentMethod('grabpay')}>
-                  <span className="payment-tab-icon">🟢</span>GrabPay
-                </button>
+              {/* Customer Information */}
+              <div className="payment-body" style={{ paddingBottom: 0, borderBottom: '1px solid var(--border)' }}>
+                <h4 style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>Delivery Address</h4>
+                <div className="card-field">
+                  <label>Full Name *</label>
+                  <input
+                    placeholder="Jane Tan"
+                    value={customerForm.name}
+                    onChange={e => setCustomerForm(f => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                <div className="card-field">
+                  <label>Email *</label>
+                  <input
+                    type="email"
+                    placeholder="jane@example.com"
+                    value={customerForm.email}
+                    onChange={e => setCustomerForm(f => ({ ...f, email: e.target.value }))}
+                  />
+                </div>
+                <div className="card-field">
+                  <label>Phone Number *</label>
+                  <input
+                    placeholder="+65 9xxx xxxx"
+                    value={customerForm.phone}
+                    onChange={e => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
+                  />
+                </div>
+                <div className="card-field">
+                  <label>Delivery Address *</label>
+                  <input
+                    placeholder="123 Main Street, Singapore 123456"
+                    value={customerForm.address}
+                    onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+                  />
+                </div>
               </div>
 
+              {/* PayNow */}
               <div className="payment-body">
-                {paymentMethod === 'card' && (
-                  <>
-                    <div className="card-field">
-                      <label>Card Number</label>
-                      <input placeholder="4242 4242 4242 4242" value={cardForm.number} onChange={e => setCardForm(f => ({ ...f, number: formatCardNumber(e.target.value) }))} maxLength={19} />
-                    </div>
-                    <div className="card-field">
-                      <label>Cardholder Name</label>
-                      <input placeholder="Jane Tan" value={cardForm.name} onChange={e => setCardForm(f => ({ ...f, name: e.target.value }))} />
-                    </div>
-                    <div className="card-row">
-                      <div className="card-field">
-                        <label>Expiry</label>
-                        <input placeholder="MM/YY" value={cardForm.expiry} onChange={e => setCardForm(f => ({ ...f, expiry: formatExpiry(e.target.value) }))} maxLength={5} />
-                      </div>
-                      <div className="card-field">
-                        <label>CVV</label>
-                        <input placeholder="•••" type="password" value={cardForm.cvv} onChange={e => setCardForm(f => ({ ...f, cvv: e.target.value.replace(/\D/, '').substring(0, 4) }))} maxLength={4} />
-                      </div>
-                    </div>
-                    <div className="stripe-badge">
-                      <span>Stripe</span> Secured by Stripe · 256-bit SSL encryption
-                    </div>
-                    <button className="btn-checkout" onClick={handlePay}>Pay ${cartTotal + delivery} SGD →</button>
-                  </>
-                )}
-
-                {paymentMethod === 'paynow' && (
-                  <div className="paynow-box">
-                    <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
-                    <div className="paynow-amount">${cartTotal + delivery} SGD <span>to pay</span></div>
-                    <div className="paynow-steps">
-                      <strong>How to pay with PayNow</strong>
-                      1. Click below to generate your secure QR code<br />
-                      2. Open your banking app and scan<br />
-                      3. Confirm the amount: <strong>${cartTotal + delivery} SGD</strong><br />
-                      4. Page updates automatically once payment is received
-                    </div>
-                    <button className="btn-checkout" onClick={handlePay}>
-                      Generate PayNow QR →
-                    </button>
+                <div className="paynow-box">
+                  <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
+                  <div className="paynow-amount">${cartTotal + delivery} SGD <span>to pay</span></div>
+                  <div className="paynow-steps">
+                    <strong>How to pay with PayNow</strong>
+                    1. Click below to generate your secure QR code<br />
+                    2. Open your banking app and scan<br />
+                    3. Confirm the amount: <strong>${cartTotal + delivery} SGD</strong><br />
+                    4. Click "I've Completed Payment" after transferring
                   </div>
-                )}
-
-                {paymentMethod === 'grabpay' && (
-                  <div className="grabpay-box">
-                    <div className="grabpay-logo">🟢</div>
-                    <div className="grabpay-name">GrabPay</div>
-                    <div className="grabpay-sub">Pay seamlessly using your GrabPay wallet.<br />You'll be redirected to the Grab app to complete payment.</div>
-                    <div className="checkout-total-row grand" style={{ justifyContent: 'center', gap: 8, marginBottom: 20 }}>
-                      <span>Amount:</span><span>${cartTotal + delivery} SGD</span>
-                    </div>
-                    <button className="btn-grabpay" onClick={handlePay}>
-                      <span>🟢</span> Pay with GrabPay
-                    </button>
-                    <p style={{ fontSize: 12, color: '#A8A29E', marginTop: 12 }}>Secured via Grab's encrypted payment gateway</p>
-                  </div>
-                )}
+                  <button className="btn-checkout" onClick={handlePayment}>
+                    Generate PayNow QR →
+                  </button>
+                </div>
               </div>
             </>
           )}

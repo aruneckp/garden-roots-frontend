@@ -5,9 +5,9 @@ export default function PickupLocations() {
     <>
       <div className="pickup-hero">
         <div className="pickup-hero-inner">
-          <div className="hero-badge" style={{ margin: '0 auto 20px' }}>📍 6 Locations Island-Wide</div>
+          <div className="hero-badge" style={{ margin: '0 auto 20px' }}>📍 3 Locations Island-Wide</div>
           <h1>Pickup Locations</h1>
-          <p>Prefer to collect in person? Visit any of our 6 pickup points across Singapore and take home your mangoes fresh.</p>
+          <p>Prefer to collect in person? Visit any of our 3 pickup points across Singapore and take home your mangoes fresh.</p>
         </div>
       </div>
 

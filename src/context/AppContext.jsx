@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
-import { varieties } from '../data/varieties';
+import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
+import { productApi } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -13,6 +14,8 @@ export function AppProvider({ children }) {
   const [region, setRegion] = useState('');
   const [page, setPage] = useState('home');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false);
@@ -26,10 +29,9 @@ export function AppProvider({ children }) {
   const chatEndRef = useRef(null);
 
   // Payment state
-  const [paymentMethod, setPaymentMethod] = useState('card');
-  const [cardForm, setCardForm] = useState({ number: '', name: '', expiry: '', cvv: '' });
+  const [paymentMethod, setPaymentMethod] = useState('paynow');
   const [payState, setPayState] = useState('idle');
-  const [orderRef] = useState('GR-' + Math.random().toString(36).substring(2, 8).toUpperCase());
+  const [orderRef, setOrderRef] = useState(null);
   const [paynowQrUrl, setPaynowQrUrl] = useState(null);
   const [paynowPiId, setPaynowPiId] = useState(null);
   const paynowPollRef = useRef(null);
@@ -38,8 +40,51 @@ export function AppProvider({ children }) {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatTyping, chatOpen]);
 
+  // Load products from API on mount
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const resp = await productApi.getProducts();
+        // Backend wraps all responses: { success, data, message }
+        const rawProducts = resp?.data ?? resp;
+        const transformedProducts = rawProducts.map(product => {
+          // Variants have a flat `price` field (current active price from Oracle pricing table)
+          const firstVariant = product.variants?.[0];
+          // Parse price cleanly: "32.0" → "$32", "38.5" → "$38.5"
+          const rawPrice = firstVariant?.price != null ? parseFloat(firstVariant.price) : 0;
+          const price = `$${Number.isInteger(rawPrice) ? rawPrice : rawPrice}`;
+          // Match static data by name to preserve emoji/image assets
+          const staticData = fallbackVarieties.find(v => v.name.toLowerCase() === product.name.toLowerCase()) || {};
+          return {
+            id: product.id,
+            // variantId is the DB variant id — required by the order API
+            variantId: firstVariant?.id,
+            name: product.name,
+            price,
+            tag: product.tag || staticData.tag || 'Standard',
+            season: `${product.season_start || 'Jan'}–${product.season_end || 'Dec'}`,
+            origin: product.origin || staticData.origin || 'India',
+            desc: product.description || staticData.desc || 'Premium mango variety',
+            variants: product.variants,
+            emoji: staticData.emoji || '🥭',
+            image: staticData.image,
+            imgHeight: staticData.imgHeight || 130,
+          };
+        });
+        setProducts(transformedProducts);
+      } catch (err) {
+        console.error('Failed to load products from API, using fallback:', err);
+        setProducts(fallbackVarieties);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    loadProducts();
+  }, []);
+
   // Derived cart values
-  const cartTotal = cart.reduce((sum, i) => sum + parseInt(i.price.replace('$', '')) * i.qty, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + parseFloat(i.price.replace('$', '')) * i.qty, 0);
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
   const delivery = cartTotal >= 120 ? 0 : 12;
 
@@ -60,75 +105,8 @@ export function AppProvider({ children }) {
 
   const removeFromCart = (id) => setCart(c => c.filter(i => i.id !== id));
 
-  // Payment helpers
-  const formatCardNumber = v => v.replace(/\D/g, '').substring(0, 16).replace(/(.{4})/g, '$1 ').trim();
-  const formatExpiry = v => { const d = v.replace(/\D/g, '').substring(0, 4); return d.length > 2 ? d.substring(0, 2) + '/' + d.substring(2) : d; };
-
   // Clean up polling when component unmounts
   useEffect(() => () => { if (paynowPollRef.current) clearInterval(paynowPollRef.current); }, []);
-
-  const handlePay = async () => {
-    if (paymentMethod === 'paynow') {
-      setPayState('processing');
-      try {
-        const res = await fetch(`${API_URL}/api/create-payment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: cartTotal + delivery,
-            description: `Garden Roots Order ${orderRef}`,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Could not create payment');
-
-        setPaynowQrUrl(data.qr_image_url);
-        setPaynowPiId(data.payment_intent_id);
-        setPayState('qr_shown');
-
-        // Poll every 3 s until Stripe confirms payment
-        paynowPollRef.current = setInterval(async () => {
-          try {
-            const r = await fetch(`${API_URL}/api/payment-status/${data.payment_intent_id}`);
-            const d = await r.json();
-            if (d.status === 'succeeded') {
-              clearInterval(paynowPollRef.current);
-              setPayState('success');
-            } else if (d.status === 'requires_payment_method') {
-              // PayNow QR code expired
-              clearInterval(paynowPollRef.current);
-              setPaynowQrUrl(null);
-              setPaynowPiId(null);
-              setPayState('expired');
-            } else if (d.status === 'canceled') {
-              clearInterval(paynowPollRef.current);
-              setPaynowQrUrl(null);
-              setPaynowPiId(null);
-              setPayState('idle');
-              setToast('Payment was canceled.');
-              setTimeout(() => setToast(null), 3000);
-            }
-          } catch (_) { /* network glitch — keep polling */ }
-        }, 3000);
-      } catch (err) {
-        setToast(`Payment error: ${err.message}`);
-        setTimeout(() => setToast(null), 4000);
-        setPayState('idle');
-      }
-      return;
-    }
-
-    // Card / GrabPay — mock for now
-    setPayState('processing');
-    setTimeout(() => setPayState('success'), 2200);
-  };
-
-  const cancelPaynow = () => {
-    if (paynowPollRef.current) clearInterval(paynowPollRef.current);
-    setPaynowQrUrl(null);
-    setPaynowPiId(null);
-    setPayState('idle');
-  };
 
   // Contact form
   const handleFormChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
@@ -151,7 +129,8 @@ export function AppProvider({ children }) {
     setChatTyping(true);
 
     const lower = msg.toLowerCase();
-    const addMatch = varieties.find(v =>
+    const varietiesToUse = products.length > 0 ? products : fallbackVarieties;
+    const addMatch = varietiesToUse.find(v =>
       lower.includes(v.name.toLowerCase().split(' ')[0].toLowerCase()) &&
       (lower.includes('add') || lower.includes('order') || lower.includes('want') || lower.includes('buy') || lower.includes('get'))
     );
@@ -184,6 +163,8 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       // Navigation
       page, setPage,
+      // Products
+      products, loadingProducts,
       // Region
       region, setRegion,
       // Newsletter
@@ -205,12 +186,15 @@ export function AppProvider({ children }) {
       pushBotMsg, sendMessage,
       // Payment
       paymentMethod, setPaymentMethod,
-      cardForm, setCardForm,
       payState, setPayState,
-      orderRef,
-      formatCardNumber, formatExpiry,
-      handlePay,
-      paynowQrUrl, paynowPiId, cancelPaynow,
+      orderRef, setOrderRef,
+      paynowQrUrl, setPaynowQrUrl, paynowPiId, setPaynowPiId,
+      cancelPaynow: () => {
+        if (paynowPollRef.current) clearInterval(paynowPollRef.current);
+        setPaynowQrUrl(null);
+        setPaynowPiId(null);
+        setPayState('idle');
+      },
     }}>
       {children}
     </AppContext.Provider>
