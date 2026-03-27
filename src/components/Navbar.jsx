@@ -1,7 +1,7 @@
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { page, setPage, cartCount } = useApp();
+  const { setPage, cartCount } = useApp();
 
   const navLinks = ['Home', 'Varieties', 'Pickup Locations', 'About Us', 'Contact Us'];
 
