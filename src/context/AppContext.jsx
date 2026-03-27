@@ -108,7 +108,7 @@ export function AppProvider({ children }) {
               setToast('Payment was canceled.');
               setTimeout(() => setToast(null), 3000);
             }
-          } catch (_) { /* network glitch — keep polling */ }
+          } catch { /* network glitch — keep polling */ }
         }, 3000);
       } catch (err) {
         setToast(`Payment error: ${err.message}`);
@@ -217,4 +217,5 @@ export function AppProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useApp = () => useContext(AppContext);
