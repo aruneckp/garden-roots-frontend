@@ -381,7 +381,7 @@ body {
 /* WHATSAPP FLOATING BUTTON */
 .wa-fab {
   position: fixed;
-  bottom: 100px;
+  bottom: 28px;
   right: 28px;
   width: 48px;
   height: 48px;
@@ -390,7 +390,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
   box-shadow: 0 4px 16px rgba(37,211,102,0.45);
   z-index: 999;
   transition: transform 0.2s;
@@ -399,6 +398,7 @@ body {
   border: none;
   cursor: pointer;
 }
+.wa-fab svg { width: 26px; height: 26px; fill: #fff; display: block; }
 .wa-fab:hover { transform: scale(1.1); }
 
 /* CART PAGE */
@@ -627,10 +627,13 @@ body {
 .chat-variety-add.in-cart { background:var(--mango); }
 
 /* CHATBOT */
-.chat-fab { position: fixed; bottom: 28px; right: 28px; width: 58px; height: 58px; border-radius: 50%; background: var(--green); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 6px 24px rgba(22,101,52,0.4); z-index: 1000; transition: transform 0.2s, background 0.2s; }
+.chat-fab { position: fixed; bottom: 88px; right: 28px; width: 62px; height: 62px; border-radius: 50%; background: var(--green); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 24px rgba(22,101,52,0.45); z-index: 1000; transition: transform 0.2s, background 0.2s; }
 .chat-fab:hover { background: #14532D; transform: scale(1.08); }
 .chat-fab .chat-notif { position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; background: var(--mango); border-radius: 50%; border: 2px solid #fff; }
-.chat-window { position: fixed; bottom: 100px; right: 28px; width: 360px; max-height: 520px; background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); display: flex; flex-direction: column; z-index: 1000; overflow: hidden; animation: chatSlideUp 0.25s ease; }
+.chat-fab-icon { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+.chat-fab-mango { font-size: 30px; line-height: 1; }
+.chat-fab-person { position: absolute; bottom: -3px; right: -6px; font-size: 14px; line-height: 1; }
+.chat-window { position: fixed; bottom: 164px; right: 28px; width: 360px; max-height: 520px; background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); display: flex; flex-direction: column; z-index: 1000; overflow: hidden; animation: chatSlideUp 0.25s ease; }
 .chat-window.expanded { width: 520px; max-height: 680px; }
 @keyframes chatSlideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 .chat-header { background: var(--green); padding: 16px 20px; display: flex; align-items: center; gap: 12px; }

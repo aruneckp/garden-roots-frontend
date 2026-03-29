@@ -1,7 +1,29 @@
 import { useApp } from '../context/AppContext';
+import { stockApi } from '../services/api';
 
 export default function Cart() {
-  const { cart, cartTotal, cartCount, delivery, updateQty, removeFromCart, setPage, setPayState } = useApp();
+  const { cart, cartTotal, cartCount, delivery, updateQty, removeFromCart, setPage, setPayState, setToast } = useApp();
+
+  const handleCheckout = async () => {
+    try {
+      const variantIds = cart.map(item => item.variantId).filter(Boolean);
+      if (variantIds.length > 0) {
+        const resp = await stockApi.checkStockBatch(variantIds);
+        const stocks = resp?.data ?? resp;
+        const outOfStock = stocks.filter(s => !s.in_stock);
+        if (outOfStock.length > 0) {
+          setToast('Some items in your cart are out of stock. Please update your cart.');
+          return;
+        }
+      }
+      setPayState('idle');
+      setPage('checkout');
+    } catch (err) {
+      // Stock check failed — proceed anyway so checkout isn't blocked
+      setPayState('idle');
+      setPage('checkout');
+    }
+  };
 
   return (
     <div className="cart-page">
@@ -37,7 +59,7 @@ export default function Cart() {
                   <span>{item.qty}</span>
                   <button onClick={() => updateQty(item.id, 1)}>+</button>
                 </div>
-                <div className="cart-item-subtotal">${parseInt(item.price.replace('$', '')) * item.qty}</div>
+                <div className="cart-item-subtotal">${parseFloat(item.price.replace('$', '')) * item.qty}</div>
                 <button className="cart-remove" onClick={() => removeFromCart(item.id)}>✕</button>
               </div>
             ))}
@@ -48,7 +70,7 @@ export default function Cart() {
             {cart.map(item => (
               <div className="summary-row" key={item.id}>
                 <span>{item.name} × {item.qty}</span>
-                <span>${parseInt(item.price.replace('$', '')) * item.qty}</span>
+                <span>${parseFloat(item.price.replace('$', '')) * item.qty}</span>
               </div>
             ))}
             <div className="summary-row" style={{ marginTop: 8 }}>
@@ -68,7 +90,7 @@ export default function Cart() {
               <span>Total</span>
               <span>${cartTotal + delivery}</span>
             </div>
-            <button className="btn-checkout" onClick={() => { setPayState('idle'); setPage('checkout'); }}>
+            <button className="btn-checkout" onClick={handleCheckout}>
               Proceed to Payment →
             </button>
             <button className="btn-continue" onClick={() => setPage('home')}>← Continue Shopping</button>
