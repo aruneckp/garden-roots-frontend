@@ -1,9 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
-import { productApi } from '../services/api';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { productApi, authApi, orderApi } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -13,6 +11,46 @@ export function AppProvider({ children }) {
   const [email, setEmail] = useState('');
   const [region, setRegion] = useState('');
   const [page, setPage] = useState('home');
+
+  // ── User auth state ────────────────────────────────────────────────────────
+  const [user, setUser] = useState(null);          // { id, email, name, picture, phone }
+  const [userToken, setUserToken] = useState(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const token = localStorage.getItem('user_token');
+    const stored = localStorage.getItem('user_data');
+    if (token && stored) {
+      try {
+        setUserToken(token);
+        setUser(JSON.parse(stored));
+      } catch (_) {
+        localStorage.removeItem('user_token');
+        localStorage.removeItem('user_data');
+      }
+    }
+  }, []);
+
+  const loginUser = (token, userData) => {
+    localStorage.setItem('user_token', token);
+    localStorage.setItem('user_data', JSON.stringify(userData));
+    setUserToken(token);
+    setUser(userData);
+  };
+
+  const logoutUser = () => {
+    localStorage.removeItem('user_token');
+    localStorage.removeItem('user_data');
+    setUserToken(null);
+    setUser(null);
+  };
+
+  const updateUserPhone = (phone) => {
+    const updated = { ...user, phone };
+    localStorage.setItem('user_data', JSON.stringify(updated));
+    setUser(updated);
+  };
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -32,13 +70,72 @@ export function AppProvider({ children }) {
   const [paymentMethod, setPaymentMethod] = useState('paynow');
   const [payState, setPayState] = useState('idle');
   const [orderRef, setOrderRef] = useState(null);
-  const [paynowQrUrl, setPaynowQrUrl] = useState(null);
-  const [paynowPiId, setPaynowPiId] = useState(null);
-  const paynowPollRef = useRef(null);
+  // Incomplete order banner: set when customer left without paying
+  const [incompleteOrderId, setIncompleteOrderId] = useState(null);
+  const hitpayPollRef = useRef(null);
 
   useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatTyping, chatOpen]);
+
+  // ── HitPay return detection ────────────────────────────────────────────────
+  // Runs once on app load. HitPay redirects back with:
+  //   ?reference=GR-ORDER-{id}&status=completed|failed|pending
+  useEffect(() => {
+    const params    = new URLSearchParams(window.location.search);
+    const reference = params.get('reference');  // "GR-ORDER-123"
+    const status    = params.get('status');
+
+    if (reference?.startsWith('GR-ORDER-')) {
+      // Clean the URL so a page refresh doesn't re-trigger this
+      window.history.replaceState({}, '', '/');
+      sessionStorage.removeItem('pending_order_id');
+
+      const orderId = parseInt(reference.replace('GR-ORDER-', ''), 10);
+      setPage('checkout');
+
+      if (status === 'failed' || status === 'cancelled') {
+        setPayState('failed');
+        return;
+      }
+
+      // status === 'completed' (or unknown) — poll DB until webhook confirms
+      setPayState('processing');
+      let attempts = 0;
+      const MAX_ATTEMPTS = 15; // 15 × 2s = 30s
+
+      hitpayPollRef.current = setInterval(async () => {
+        attempts += 1;
+        try {
+          const resp = await orderApi.getOrder(orderId);
+          const order = resp?.data ?? resp;
+          if (order.payment_status === 'succeeded') {
+            clearInterval(hitpayPollRef.current);
+            setOrderRef(order.order_ref);
+            setPayState('success');
+            return;
+          }
+        } catch (_) { /* network glitch — keep polling */ }
+
+        if (attempts >= MAX_ATTEMPTS) {
+          clearInterval(hitpayPollRef.current);
+          setPayState('failed');
+        }
+      }, 2000);
+
+      return;
+    }
+
+    // No HitPay return params — check for incomplete (abandoned) order
+    const pendingId = sessionStorage.getItem('pending_order_id');
+    if (pendingId) {
+      setIncompleteOrderId(parseInt(pendingId, 10));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clean up poll on unmount
+  useEffect(() => () => { if (hitpayPollRef.current) clearInterval(hitpayPollRef.current); }, []);
 
   // Load products from API on mount
   useEffect(() => {
@@ -104,9 +201,6 @@ export function AppProvider({ children }) {
   };
 
   const removeFromCart = (id) => setCart(c => c.filter(i => i.id !== id));
-
-  // Clean up polling when component unmounts
-  useEffect(() => () => { if (paynowPollRef.current) clearInterval(paynowPollRef.current); }, []);
 
   // Contact form
   const handleFormChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
@@ -188,13 +282,10 @@ export function AppProvider({ children }) {
       paymentMethod, setPaymentMethod,
       payState, setPayState,
       orderRef, setOrderRef,
-      paynowQrUrl, setPaynowQrUrl, paynowPiId, setPaynowPiId,
-      cancelPaynow: () => {
-        if (paynowPollRef.current) clearInterval(paynowPollRef.current);
-        setPaynowQrUrl(null);
-        setPaynowPiId(null);
-        setPayState('idle');
-      },
+      incompleteOrderId, setIncompleteOrderId,
+      // User auth
+      user, userToken, showAuthModal, setShowAuthModal,
+      loginUser, logoutUser, updateUserPhone,
     }}>
       {children}
     </AppContext.Provider>

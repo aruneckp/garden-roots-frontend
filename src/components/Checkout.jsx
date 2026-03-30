@@ -1,25 +1,58 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { orderApi, paymentApi } from '../services/api';
+import { orderApi, paymentApi, locationApi } from '../services/api';
 
 export default function Checkout() {
   const {
     cart, cartTotal, delivery,
     payState, setPayState,
     orderRef, setOrderRef, setCart, setToast, setPage,
-    paynowQrUrl, setPaynowQrUrl, paynowPiId, setPaynowPiId, cancelPaynow,
+    incompleteOrderId, setIncompleteOrderId,
+    user, userToken,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
+    name:  user?.name  || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    address: '',
   });
-  const [currentOrderId, setCurrentOrderId] = useState(null);
-  const paynowPollRef = useRef(null);
 
-  useEffect(() => () => { if (paynowPollRef.current) clearInterval(paynowPollRef.current); }, []);
+  // Keep form in sync if user logs in after opening checkout
+  useEffect(() => {
+    if (user) {
+      setCustomerForm(f => ({
+        ...f,
+        name:  f.name  || user.name  || '',
+        email: f.email || user.email || '',
+        phone: f.phone || user.phone || '',
+      }));
+    }
+  }, [user]);
+
+  // Delivery type
+  const [deliveryType, setDeliveryType] = useState('delivery');
+
+  // Pickup locations
+  const [pickupLocations, setPickupLocations] = useState([]);
+  const [selectedPickupId, setSelectedPickupId] = useState(null);
+
+  useEffect(() => {
+    locationApi.getPickupLocations()
+      .then(resp => setPickupLocations(resp?.data ?? resp))
+      .catch(() => {});
+  }, []);
+
+  const selectedPickup = pickupLocations.find(l => l.id === selectedPickupId) || null;
+
+  // Notes
+  const [customerNotes, setCustomerNotes] = useState('');
+
+  // Effective delivery fee shown in UI
+  const displayDelivery = deliveryType === 'pickup' ? 0 : delivery;
+  const displayTotal    = cartTotal + displayDelivery;
+
+  const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -29,47 +62,42 @@ export default function Checkout() {
   const handleCreateOrder = async () => {
     try {
       const { name, email, phone, address } = customerForm;
-      if (!name.trim() || !email.trim() || !phone.trim() || !address.trim()) {
-        showToast('Please fill in all required fields');
+
+      if (!name.trim() || !email.trim() || !phone.trim()) {
+        showToast('Please fill in your name, email and phone number');
+        return null;
+      }
+      if (deliveryType === 'delivery' && !address.trim()) {
+        showToast('Please enter your delivery address');
+        return null;
+      }
+      if (deliveryType === 'pickup' && !selectedPickupId) {
+        showToast('Please select a pickup location');
         return null;
       }
 
       const orderItems = cart.map(item => ({
         product_variant_id: item.variantId ?? item.id,
-        quantity: item.qty
+        quantity: item.qty,
       }));
 
       const resp = await orderApi.createOrder({
-        items: orderItems,
-        customerName: customerForm.name,
-        customerEmail: customerForm.email,
-        customerPhone: customerForm.phone,
-        deliveryAddress: customerForm.address,
-        paymentMethod: 'paynow'
+        items:             orderItems,
+        customerName:      name,
+        customerEmail:     email,
+        customerPhone:     phone,
+        paymentMethod:     'paynow',
+        deliveryType,
+        deliveryAddress:   deliveryType === 'delivery' ? address : null,
+        pickupLocationId:  deliveryType === 'pickup'   ? selectedPickupId : null,
+        customerNotes:     customerNotes.trim() || null,
+        userId:            user?.id || null,
       });
-      const orderData = resp?.data ?? resp;
-      return orderData;
+      return resp?.data ?? resp;
     } catch (err) {
       showToast(`Order creation failed: ${err.message}`);
       console.error(err);
       return null;
-    }
-  };
-
-  // Called when polling detects 'succeeded'
-  const finalisePayment = async (orderId, intentId) => {
-    if (paynowPollRef.current) clearInterval(paynowPollRef.current);
-    try {
-      const confirmResult = await paymentApi.confirmPayment(orderId, intentId);
-      const confirmData = confirmResult?.data ?? confirmResult;
-      if (confirmData.order_ref) {
-        setOrderRef(confirmData.order_ref);
-      }
-      setPayState('success');
-    } catch (confirmErr) {
-      showToast(`Order confirmation failed: ${confirmErr.message}`);
-      console.error('Payment confirmation error:', confirmErr);
-      setPayState('idle');
     }
   };
 
@@ -81,38 +109,25 @@ export default function Checkout() {
     setPayState('processing');
     try {
       const resp = await paymentApi.createPayment(
-        cartTotal + delivery,
+        displayTotal,
         `Garden Roots Order GR-${order.id}`,
-        order.id
+        order.id,
+        customerForm.name,
+        customerForm.email,
+        customerForm.phone,
       );
       const data = resp?.data ?? resp;
 
-      if (!data.payment_intent_id) {
-        showToast('Error: Payment intent ID not received from server');
+      if (!data.payment_url) {
+        showToast('Error: Payment URL not received from server');
         setPayState('idle');
         return;
       }
 
-      setPaynowQrUrl(data.qr_url);
-      setPaynowPiId(data.payment_intent_id);
-      setPayState('qr_shown');
-
-      // Poll every 3s — catches webhook-driven status updates in production
-      paynowPollRef.current = setInterval(async () => {
-        try {
-          const r = await paymentApi.getPaymentStatus(data.payment_intent_id);
-          const d = r?.data ?? r;
-          if (d.status === 'succeeded') {
-            // Webhook already marked it — finalise the order
-            await finalisePayment(order.id, data.payment_intent_id);
-          } else if (d.status === 'expired' || d.status === 'requires_payment_method') {
-            clearInterval(paynowPollRef.current);
-            setPaynowQrUrl(null);
-            setPaynowPiId(null);
-            setPayState('expired');
-          }
-        } catch (_) { /* network glitch — keep polling */ }
-      }, 3000);
+      // Store order ID so we can show "incomplete order" banner if customer leaves
+      sessionStorage.setItem('pending_order_id', order.id);
+      // Redirect to HitPay hosted checkout
+      window.location.href = data.payment_url;
     } catch (err) {
       showToast(`Payment error: ${err.message}`);
       setPayState('idle');
@@ -123,6 +138,51 @@ export default function Checkout() {
     <div className="checkout-page">
       <h1>Secure Checkout</h1>
       <p className="checkout-page-sub">Complete your order below</p>
+
+      {/* Incomplete / abandoned order banner */}
+      {incompleteOrderId && (
+        <div style={{ margin: '0 auto 20px', maxWidth: 760, padding: '14px 18px', background: '#FEF3C7', border: '1px solid #F59E0B', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
+          <span>⚠️ You have an incomplete order <strong>#{incompleteOrderId}</strong> that wasn't paid. Would you like to retry payment?</span>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button
+              className="btn-checkout"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={async () => {
+                setIncompleteOrderId(null);
+                sessionStorage.removeItem('pending_order_id');
+                setPayState('processing');
+                try {
+                  const resp = await paymentApi.createPayment(
+                    displayTotal,
+                    `Garden Roots Order GR-${incompleteOrderId}`,
+                    incompleteOrderId,
+                    customerForm.name,
+                    customerForm.email,
+                    customerForm.phone,
+                  );
+                  const data = resp?.data ?? resp;
+                  if (!data.payment_url) { showToast('Error: Payment URL not received'); setPayState('idle'); return; }
+                  sessionStorage.setItem('pending_order_id', incompleteOrderId);
+                  window.location.href = data.payment_url;
+                } catch (err) {
+                  showToast(`Payment error: ${err.message}`);
+                  setPayState('idle');
+                }
+              }}
+            >
+              Retry Payment
+            </button>
+            <button
+              className="btn-continue"
+              style={{ padding: '6px 14px', fontSize: 13 }}
+              onClick={() => { setIncompleteOrderId(null); sessionStorage.removeItem('pending_order_id'); }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="checkout-layout">
 
         {/* Order Summary */}
@@ -142,14 +202,17 @@ export default function Checkout() {
           ))}
           <hr className="checkout-divider" />
           <div className="checkout-total-row"><span>Subtotal</span><span>${cartTotal}</span></div>
-          <div className="checkout-total-row"><span>Delivery</span><span>{delivery === 0 ? 'Free 🎉' : `$${delivery}`}</span></div>
-          <div className="checkout-total-row grand"><span>Total</span><span>${cartTotal + delivery} SGD</span></div>
+          <div className="checkout-total-row">
+            <span>Delivery</span>
+            <span>{displayDelivery === 0 ? (deliveryType === 'pickup' ? 'Free (Self-Pickup) 🏪' : 'Free 🎉') : `$${displayDelivery}`}</span>
+          </div>
+          <div className="checkout-total-row grand"><span>Total</span><span>${displayTotal} SGD</span></div>
         </div>
 
         {/* Payment */}
         <div className="payment-card">
           <div className="payment-card-header">
-            <h3>Delivery & Payment</h3>
+            <h3>Fulfilment & Payment</h3>
           </div>
 
           {payState === 'success' ? (
@@ -157,7 +220,7 @@ export default function Checkout() {
               <div className="payment-success">
                 <div className="success-icon">✅</div>
                 <h3>Payment Successful!</h3>
-                <p>Thank you for your order. Your fresh mangoes are on their way! 🥭</p>
+                <p>Thank you for your order. {deliveryType === 'pickup' ? 'Your order will be ready for collection soon! 🏪' : 'Your fresh mangoes are on their way! 🥭'}</p>
                 <div className="order-ref">Order Ref: {orderRef}</div>
                 <button className="btn-checkout" onClick={() => { setCart([]); setPage('home'); setPayState('idle'); }}>
                   Back to Home
@@ -168,46 +231,44 @@ export default function Checkout() {
             <div className="payment-body">
               <div className="payment-processing">
                 <div className="spinner" />
-                <p style={{ color: '#78716C', fontSize: 14 }}>Creating your PayNow payment…</p>
+                <p style={{ color: '#78716C', fontSize: 14 }}>Verifying your payment… please wait</p>
               </div>
             </div>
-          ) : payState === 'qr_shown' ? (
-            <div className="payment-body">
-              <div className="paynow-box">
-                <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
-                <div className="qr-frame">
-                  <img src={paynowQrUrl} alt="PayNow QR Code" style={{ width: 154, height: 154, display: 'block' }} />
-                </div>
-                <div className="paynow-amount">${cartTotal + delivery} SGD <span>to pay</span></div>
-                <div className="paynow-steps">
-                  <strong>How to pay with PayNow</strong>
-                  1. Open your banking app (DBS/OCBC/UOB…)<br />
-                  2. Select PayNow → Scan QR<br />
-                  3. Verify amount: <strong>${cartTotal + delivery} SGD</strong><br />
-                  4. Page updates automatically once payment is received
-                </div>
-                <div className="paynow-polling-status">
-                  <span className="polling-dot" />Waiting for payment confirmation…
-                </div>
-                <button className="btn-continue" onClick={cancelPaynow}>← Cancel</button>
-              </div>
-            </div>
-          ) : payState === 'expired' ? (
+          ) : payState === 'failed' ? (
             <div className="payment-body">
               <div className="payment-success">
-                <div className="success-icon">⏰</div>
-                <h3>QR Code Expired</h3>
-                <p>The PayNow QR code has expired. Please generate a new one to complete your payment.</p>
-                <button className="btn-checkout" onClick={() => setPayState('idle')}>
+                <div className="success-icon">❌</div>
+                <h3>Payment Not Completed</h3>
+                <p>Your payment was not completed or has failed. No charge was made.</p>
+                <button className="btn-checkout" onClick={() => { sessionStorage.removeItem('pending_order_id'); setPayState('idle'); }}>
                   Try Again →
                 </button>
               </div>
             </div>
           ) : (
             <>
+              {/* Delivery Type Toggle */}
+              <div className="payment-body" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Fulfilment Method</h4>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    className={`checkout-type-btn${deliveryType === 'delivery' ? ' active' : ''}`}
+                    onClick={() => setDeliveryType('delivery')}
+                  >
+                    🚚 Home Delivery
+                  </button>
+                  <button
+                    className={`checkout-type-btn${deliveryType === 'pickup' ? ' active' : ''}`}
+                    onClick={() => setDeliveryType('pickup')}
+                  >
+                    🏪 Self-Pickup
+                  </button>
+                </div>
+              </div>
+
               {/* Customer Information */}
               <div className="payment-body" style={{ paddingBottom: 0, borderBottom: '1px solid var(--border)' }}>
-                <h4 style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>Delivery Address</h4>
+                <h4 style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>Contact Details</h4>
                 <div className="card-field">
                   <label>Full Name *</label>
                   <input
@@ -233,12 +294,65 @@ export default function Checkout() {
                     onChange={e => setCustomerForm(f => ({ ...f, phone: e.target.value }))}
                   />
                 </div>
+
+                {/* Delivery address — only shown for home delivery */}
+                {deliveryType === 'delivery' && (
+                  <div className="card-field">
+                    <label>Delivery Address *</label>
+                    <input
+                      placeholder="123 Main Street, #04-01, Singapore 123456"
+                      value={customerForm.address}
+                      onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+                    />
+                  </div>
+                )}
+
+                {/* Pickup location selector — only shown for self-pickup */}
+                {deliveryType === 'pickup' && (
+                  <>
+                    <div className="card-field">
+                      <label>Pickup Location *</label>
+                      <select
+                        value={selectedPickupId || ''}
+                        onChange={e => setSelectedPickupId(e.target.value ? Number(e.target.value) : null)}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: '#fff' }}
+                      >
+                        <option value="">— Select a location —</option>
+                        {pickupLocations.map(loc => (
+                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Show selected location details + WhatsApp */}
+                    {selectedPickup && (
+                      <div style={{ margin: '4px 0 12px', padding: '12px 14px', background: 'var(--cream)', borderRadius: 8, fontSize: 13, lineHeight: 1.6 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{selectedPickup.name}</div>
+                        <div style={{ color: 'var(--text)' }}>📍 {selectedPickup.address}</div>
+                        {selectedPickup.whatsapp_phone && (
+                          <a
+                            href={`https://wa.me/${selectedPickup.whatsapp_phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#25D366', fontWeight: 600, textDecoration: 'none' }}
+                          >
+                            💬 WhatsApp: {selectedPickup.whatsapp_phone}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Notes / feedback — always optional */}
                 <div className="card-field">
-                  <label>Delivery Address *</label>
-                  <input
-                    placeholder="123 Main Street, Singapore 123456"
-                    value={customerForm.address}
-                    onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
+                  <label>Notes / Comments <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span></label>
+                  <textarea
+                    placeholder="Any special instructions, preferred delivery time, or feedback…"
+                    value={customerNotes}
+                    onChange={e => setCustomerNotes(e.target.value)}
+                    rows={3}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, resize: 'vertical', fontFamily: 'inherit' }}
                   />
                 </div>
               </div>
@@ -247,16 +361,16 @@ export default function Checkout() {
               <div className="payment-body">
                 <div className="paynow-box">
                   <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
-                  <div className="paynow-amount">${cartTotal + delivery} SGD <span>to pay</span></div>
+                  <div className="paynow-amount">${displayTotal} SGD <span>to pay</span></div>
                   <div className="paynow-steps">
                     <strong>How to pay with PayNow</strong>
                     1. Click below to generate your secure QR code<br />
                     2. Open your banking app and scan<br />
-                    3. Confirm the amount: <strong>${cartTotal + delivery} SGD</strong><br />
+                    3. Confirm the amount: <strong>${displayTotal} SGD</strong><br />
                     4. Click "I've Completed Payment" after transferring
                   </div>
                   <button className="btn-checkout" onClick={handlePayment}>
-                    Generate PayNow QR →
+                    Pay with PayNow via HitPay →
                   </button>
                 </div>
               </div>

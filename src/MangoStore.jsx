@@ -15,9 +15,11 @@ import PickupLocations from './components/PickupLocations';
 import Chatbot from './components/Chatbot';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
+import AuthModal from './components/AuthModal';
+import MyBookings from './components/MyBookings';
 
 function StoreContent() {
-  const { page, toast } = useApp();
+  const { page, toast, showAuthModal } = useApp();
 
   return (
     <>
@@ -28,6 +30,7 @@ function StoreContent() {
       {page === 'about-us' && <AboutUs />}
       {page === 'contact-us' && <ContactUs />}
       {page === 'pickup-locations' && <PickupLocations />}
+      {page === 'my-bookings' && <MyBookings />}
 
       {page === 'varieties' && <VarietiesSection />}
 
@@ -46,6 +49,8 @@ function StoreContent() {
       {toast && <div className="toast">{toast}</div>}
 
       <Chatbot />
+
+      {showAuthModal && <AuthModal />}
     </>
   );
 }

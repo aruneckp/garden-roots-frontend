@@ -54,9 +54,11 @@ async function _request(path, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   }
 }
 
-const get  = (path)        => _request(path);
-const post = (path, body)  => _request(path, { method: 'POST', body: JSON.stringify(body) });
-const put  = (path, body)  => _request(path, { method: 'PUT',  body: body ? JSON.stringify(body) : undefined });
+const get  = (path, headers = {})       => _request(path, { headers });
+const post = (path, body, headers = {}) => _request(path, { method: 'POST', body: JSON.stringify(body), headers });
+const put  = (path, body, headers = {}) => _request(path, { method: 'PUT',  body: body ? JSON.stringify(body) : undefined, headers });
+
+const authHeader = (token) => token ? { Authorization: `Bearer ${token}` } : {};
 
 // ---------------------------------------------------------------------------
 // Product API
@@ -84,12 +86,16 @@ export const stockApi = {
 export const orderApi = {
   createOrder: (orderData) =>
     post('/api/v1/orders', {
-      items:            orderData.items,
-      customer_name:    orderData.customerName,
-      customer_email:   orderData.customerEmail,
-      customer_phone:   orderData.customerPhone,
-      delivery_address: orderData.deliveryAddress,
-      payment_method:   orderData.paymentMethod || 'paynow',
+      items:               orderData.items,
+      customer_name:       orderData.customerName,
+      customer_email:      orderData.customerEmail,
+      customer_phone:      orderData.customerPhone,
+      payment_method:      orderData.paymentMethod || 'paynow',
+      delivery_type:       orderData.deliveryType || 'delivery',
+      delivery_address:    orderData.deliveryAddress || null,
+      pickup_location_id:  orderData.pickupLocationId || null,
+      customer_notes:      orderData.customerNotes || null,
+      ...(orderData.userId ? { user_id: orderData.userId } : {}),
     }),
 
   getOrder:       (orderId) => get(`/api/v1/orders/${orderId}`),
@@ -101,12 +107,15 @@ export const orderApi = {
 // ---------------------------------------------------------------------------
 
 export const paymentApi = {
-  createPayment: (amount, description, orderId) =>
+  createPayment: (amount, description, orderId, customerName, customerEmail, customerPhone) =>
     post('/api/v1/payments/create-payment', {
       amount,
       description,
-      order_id:       orderId,
-      payment_method: 'paynow',
+      order_id:        orderId,
+      payment_method:  'paynow',
+      customer_name:   customerName  || null,
+      customer_email:  customerEmail || null,
+      customer_phone:  customerPhone || null,
     }),
 
   getPaymentStatus: (paymentIntentId) =>
@@ -121,6 +130,28 @@ export const paymentApi = {
 // ---------------------------------------------------------------------------
 
 export const locationApi = {
-  getLocations:  ()           => get('/api/v1/locations'),
-  getLocation:   (locationId) => get(`/api/v1/locations/${locationId}`),
+  getLocations:        ()  => get('/api/v1/locations'),
+  getLocation: (locationId) => get(`/api/v1/locations/${locationId}`),
+  getPickupLocations:  ()  => get('/api/v1/locations/pickup'),
+};
+
+// ---------------------------------------------------------------------------
+// Auth API (Google OAuth)
+// ---------------------------------------------------------------------------
+
+export const authApi = {
+  googleLogin: (idToken) =>
+    post('/api/v1/auth/google', { id_token: idToken }),
+};
+
+// ---------------------------------------------------------------------------
+// User API (requires user JWT)
+// ---------------------------------------------------------------------------
+
+export const userApi = {
+  getMe:          (token)                   => get('/api/v1/users/me', authHeader(token)),
+  updatePhone:    (token, phone)            => put('/api/v1/users/me/phone', { phone }, authHeader(token)),
+  getMyOrders:    (token)                   => get('/api/v1/users/me/orders', authHeader(token)),
+  submitFeedback: (token, orderId, feedback) =>
+    put(`/api/v1/users/me/orders/${orderId}/feedback`, { delivery_feedback: feedback }, authHeader(token)),
 };
