@@ -4,15 +4,25 @@ import { useApp } from '../context/AppContext';
 export default function Navbar() {
   const { page, setPage, cartCount, user, logoutUser, setShowAuthModal } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef(null);
+  const navRef = useRef(null);
 
   const navLinks = ['Home', 'Varieties', 'Pickup Locations', 'About Us', 'Contact Us'];
 
-  // Close dropdown when clicking outside
+  const navigate = (link) => {
+    setPage(link.toLowerCase().replace(/ /g, '-'));
+    setMobileOpen(false);
+  };
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
         setMenuOpen(false);
+      }
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setMobileOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -23,30 +33,30 @@ export default function Navbar() {
     <>
       <div className="topbar">🥭 Fresh Indian Mangoes Air-Flown to Singapore — Free delivery over $120</div>
 
-      <nav className="nav">
+      <nav className="nav" ref={navRef}>
         <div className="nav-inner">
-          <div className="logo" onClick={() => setPage('home')}>{'🌿 Garden'}<span>{'Roots'}</span></div>
+          <div className="logo" onClick={() => { setPage('home'); setMobileOpen(false); }}>
+            {'🌿 Garden'}<span>{'Roots'}</span>
+          </div>
+
+          {/* Desktop nav links */}
           <ul className="nav-links">
             {navLinks.map(l => (
               <li key={l}>
-                <a href="#" onClick={e => { e.preventDefault(); setPage(l.toLowerCase().replace(/ /g, '-')); }}>
+                <a href="#" onClick={e => { e.preventDefault(); navigate(l); }}>
                   {l}
                 </a>
               </li>
             ))}
           </ul>
+
           <div className="nav-actions">
-            <button className="cart-btn" onClick={() => setPage('cart')}>
+            <button className="cart-btn" onClick={() => { setPage('cart'); setMobileOpen(false); }}>
               🛒
               {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
             </button>
 
-            {/* Admin button — disabled in UI; access /admin manually via URL */}
-            <button className="btn-outline" disabled style={{ opacity: 0.35, cursor: 'not-allowed' }}>
-              Admin
-            </button>
-
-            {user ? (
+{user ? (
               <div className="user-menu" ref={menuRef}>
                 <img
                   src={user.picture || ''}
@@ -75,12 +85,64 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <button className="btn-primary" onClick={() => setShowAuthModal(true)}>
+              <button className="btn-primary sign-in-btn" onClick={() => setShowAuthModal(true)}>
                 Sign In
               </button>
             )}
+
+            {/* Hamburger button — mobile only */}
+            <button
+              className={`hamburger${mobileOpen ? ' open' : ''}`}
+              onClick={() => setMobileOpen(prev => !prev)}
+              aria-label="Toggle navigation menu"
+            >
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
           </div>
         </div>
+
+        {/* Mobile slide-down menu */}
+        {mobileOpen && (
+          <div className="mobile-nav">
+            <ul>
+              {navLinks.map(l => (
+                <li key={l}>
+                  <a href="#" onClick={e => { e.preventDefault(); navigate(l); }}>
+                    {l}
+                  </a>
+                </li>
+              ))}
+              <li className="mobile-nav-divider" />
+              <li>
+                <a href="#" onClick={e => { e.preventDefault(); setPage('cart'); setMobileOpen(false); }}>
+                  🛒 Cart {cartCount > 0 && `(${cartCount})`}
+                </a>
+              </li>
+              {user ? (
+                <>
+                  <li>
+                    <a href="#" onClick={e => { e.preventDefault(); setPage('my-bookings'); setMobileOpen(false); }}>
+                      My Bookings
+                    </a>
+                  </li>
+                  <li>
+                    <a href="#" className="logout-link" onClick={e => { e.preventDefault(); logoutUser(); setMobileOpen(false); }}>
+                      Sign Out
+                    </a>
+                  </li>
+                </>
+              ) : (
+                <li>
+                  <a href="#" onClick={e => { e.preventDefault(); setShowAuthModal(true); setMobileOpen(false); }}>
+                    Sign In
+                  </a>
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
       </nav>
     </>
   );
