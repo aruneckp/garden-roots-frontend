@@ -124,8 +124,9 @@ export default function Checkout() {
         return;
       }
 
-      // Store order ID so we can show "incomplete order" banner if customer leaves
+      // Store order ID + HitPay payment UUID so we can recover the order on return
       sessionStorage.setItem('pending_order_id', order.id);
+      sessionStorage.setItem('pending_payment_id', data.payment_intent_id);
       // Redirect to HitPay hosted checkout
       window.location.href = data.payment_url;
     } catch (err) {
@@ -133,6 +134,72 @@ export default function Checkout() {
       setPayState('idle');
     }
   };
+
+  // ── Full-page order confirmation (replaces checkout layout after payment) ──
+  if (payState === 'success') {
+    return (
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '60px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
+        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(26px,4vw,36px)', color: 'var(--dark)', marginBottom: 8 }}>
+          Order Confirmed!
+        </h1>
+        <p style={{ color: '#78716C', fontSize: 15, marginBottom: 32 }}>
+          {deliveryType === 'pickup'
+            ? 'Your order is confirmed. We\'ll get it ready for pickup soon!'
+            : 'Your order is confirmed and will be on its way shortly!'}
+        </p>
+
+        {/* Order number — prominent */}
+        <div style={{ background: '#F0FDF4', border: '2px solid #86EFAC', borderRadius: 16, padding: '24px 32px', marginBottom: 32, display: 'inline-block', minWidth: 260 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#16A34A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+            Order Reference
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--dark)', letterSpacing: '0.04em', fontFamily: 'monospace' }}>
+            {orderRef}
+          </div>
+          <div style={{ fontSize: 12, color: '#78716C', marginTop: 6 }}>
+            Save this number to track your order
+          </div>
+        </div>
+
+        {/* Items ordered */}
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 24px', marginBottom: 24, textAlign: 'left' }}>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)', marginBottom: 14 }}>Items Ordered</div>
+          {cart.map(item => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--dark)' }}>{item.name}</div>
+                  <div style={{ fontSize: 12, color: '#78716C' }}>Qty: {item.qty}</div>
+                </div>
+              </div>
+              <div style={{ fontWeight: 600, color: 'var(--dark)' }}>${parseFloat(item.price.replace('$', '')) * item.qty}</div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>
+            <span>Total Paid</span>
+            <span style={{ color: 'var(--green)' }}>${displayTotal} SGD</span>
+          </div>
+        </div>
+
+        {/* What happens next */}
+        <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '16px 20px', marginBottom: 32, textAlign: 'left', fontSize: 14, color: '#78350F', lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>What happens next?</div>
+          {deliveryType === 'pickup'
+            ? 'We\'ll prepare your order and notify you when it\'s ready for collection at your selected pickup location.'
+            : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
+        </div>
+
+        <button
+          className="btn-checkout"
+          onClick={() => { setCart([]); setPage('home'); setPayState('idle'); }}
+        >
+          Continue Shopping
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="checkout-page">
@@ -163,6 +230,7 @@ export default function Checkout() {
                   const data = resp?.data ?? resp;
                   if (!data.payment_url) { showToast('Error: Payment URL not received'); setPayState('idle'); return; }
                   sessionStorage.setItem('pending_order_id', incompleteOrderId);
+                  sessionStorage.setItem('pending_payment_id', data.payment_intent_id);
                   window.location.href = data.payment_url;
                 } catch (err) {
                   showToast(`Payment error: ${err.message}`);
@@ -215,19 +283,7 @@ export default function Checkout() {
             <h3>Fulfilment & Payment</h3>
           </div>
 
-          {payState === 'success' ? (
-            <div className="payment-body">
-              <div className="payment-success">
-                <div className="success-icon">✅</div>
-                <h3>Payment Successful!</h3>
-                <p>Thank you for your order. {deliveryType === 'pickup' ? 'Your order will be ready for collection soon! 🏪' : 'Your fresh mangoes are on their way! 🥭'}</p>
-                <div className="order-ref">Order Ref: {orderRef}</div>
-                <button className="btn-checkout" onClick={() => { setCart([]); setPage('home'); setPayState('idle'); }}>
-                  Back to Home
-                </button>
-              </div>
-            </div>
-          ) : payState === 'processing' ? (
+          {payState === 'processing' ? (
             <div className="payment-body">
               <div className="payment-processing">
                 <div className="spinner" />

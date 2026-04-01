@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
-import { productApi, authApi, orderApi } from '../services/api';
+import { productApi, authApi, orderApi, paymentApi } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -72,70 +72,71 @@ export function AppProvider({ children }) {
   const [orderRef, setOrderRef] = useState(null);
   // Incomplete order banner: set when customer left without paying
   const [incompleteOrderId, setIncompleteOrderId] = useState(null);
-  const hitpayPollRef = useRef(null);
 
   useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatTyping, chatOpen]);
 
-  // ── HitPay return detection ────────────────────────────────────────────────
-  // Runs once on app load. HitPay redirects back with:
-  //   ?reference=GR-ORDER-{id}&status=completed|failed|pending
+  // ── HitPay return handler ─────────────────────────────────────────────────
+  // HitPay redirects back with: ?reference=<payment_uuid>&status=completed|failed
+  // We trust the status from the URL and immediately confirm the order in DB.
   useEffect(() => {
-    const params    = new URLSearchParams(window.location.search);
-    const reference = params.get('reference');  // "GR-ORDER-123"
-    const status    = params.get('status');
+    const params  = new URLSearchParams(window.location.search);
+    const status  = params.get('status');
+    const payId   = params.get('reference');   // HitPay payment UUID
+    const orderId = sessionStorage.getItem('pending_order_id');
 
-    if (reference?.startsWith('GR-ORDER-')) {
-      // Clean the URL so a page refresh doesn't re-trigger this
-      window.history.replaceState({}, '', '/');
-      sessionStorage.removeItem('pending_order_id');
+    // Only act when we have HitPay return params and a stored order
+    if (!payId || !orderId || !status) return;
 
-      const orderId = parseInt(reference.replace('GR-ORDER-', ''), 10);
-      setPage('checkout');
+    // Clean up immediately so refresh doesn't re-trigger
+    window.history.replaceState({}, '', '/');
+    sessionStorage.removeItem('pending_order_id');
+    sessionStorage.removeItem('pending_payment_id');
 
-      if (status === 'failed' || status === 'cancelled') {
-        setPayState('failed');
-        return;
-      }
+    setPage('checkout');
 
-      // status === 'completed' (or unknown) — poll DB until webhook confirms
-      setPayState('processing');
-      let attempts = 0;
-      const MAX_ATTEMPTS = 15; // 15 × 2s = 30s
-
-      hitpayPollRef.current = setInterval(async () => {
-        attempts += 1;
-        try {
-          const resp = await orderApi.getOrder(orderId);
-          const order = resp?.data ?? resp;
-          if (order.payment_status === 'succeeded') {
-            clearInterval(hitpayPollRef.current);
-            setOrderRef(order.order_ref);
-            setPayState('success');
-            return;
-          }
-        } catch (_) { /* network glitch — keep polling */ }
-
-        if (attempts >= MAX_ATTEMPTS) {
-          clearInterval(hitpayPollRef.current);
-          setPayState('failed');
-        }
-      }, 2000);
-
+    if (status === 'failed' || status === 'cancelled') {
+      setPayState('failed');
       return;
     }
 
-    // No HitPay return params — check for incomplete (abandoned) order
-    const pendingId = sessionStorage.getItem('pending_order_id');
-    if (pendingId) {
-      setIncompleteOrderId(parseInt(pendingId, 10));
-    }
+    // status === 'completed' — confirm in DB
+    setPayState('processing');
+
+    const confirm = async () => {
+      const MAX = 5;
+      for (let i = 1; i <= MAX; i++) {
+        try {
+          console.log(`[HitPay] confirm attempt ${i} orderId=${orderId} payId=${payId}`);
+          const resp    = await paymentApi.confirmPayment(parseInt(orderId, 10), payId);
+          const result  = resp?.data ?? resp;
+          const ref     = result?.order_ref ?? result?.data?.order_ref ?? null;
+          console.log('[HitPay] confirm success, order_ref=', ref, 'full=', result);
+          setOrderRef(ref);
+          setPayState('success');
+          return;
+        } catch (err) {
+          console.error(`[HitPay] confirm attempt ${i} failed:`, err?.message ?? err);
+          if (i < MAX) await new Promise(r => setTimeout(r, 1500));
+        }
+      }
+      // All confirm attempts failed — try reading order directly from DB
+      try {
+        const orderResp = await orderApi.getOrder(parseInt(orderId, 10));
+        const order     = orderResp?.data ?? orderResp;
+        if (order?.payment_status === 'succeeded') {
+          setOrderRef(order.order_ref ?? null);
+          setPayState('success');
+          return;
+        }
+      } catch (_) {}
+      setPayState('failed');
+    };
+
+    confirm();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Clean up poll on unmount
-  useEffect(() => () => { if (hitpayPollRef.current) clearInterval(hitpayPollRef.current); }, []);
 
   // Load products from API on mount
   useEffect(() => {
