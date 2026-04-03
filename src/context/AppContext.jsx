@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
-import { productApi, authApi, orderApi, paymentApi } from '../services/api';
+import { productApi, authApi, orderApi, paymentApi, userApi } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -25,6 +25,7 @@ export function AppProvider({ children }) {
       try {
         setUserToken(token);
         setUser(JSON.parse(stored));
+        refreshMyOrders(token);   // load orders immediately on restore
       } catch (_) {
         localStorage.removeItem('user_token');
         localStorage.removeItem('user_data');
@@ -37,6 +38,7 @@ export function AppProvider({ children }) {
     localStorage.setItem('user_data', JSON.stringify(userData));
     setUserToken(token);
     setUser(userData);
+    refreshMyOrders(token);       // load orders immediately on login
   };
 
   const logoutUser = () => {
@@ -44,6 +46,7 @@ export function AppProvider({ children }) {
     localStorage.removeItem('user_data');
     setUserToken(null);
     setUser(null);
+    setMyOrders([]);              // clear orders on logout
   };
 
   const updateUserPhone = (phone) => {
@@ -70,8 +73,25 @@ export function AppProvider({ children }) {
   const [paymentMethod, setPaymentMethod] = useState('paynow');
   const [payState, setPayState] = useState('idle');
   const [orderRef, setOrderRef] = useState(null);
+  const [confirmedTotal, setConfirmedTotal] = useState(null);
   // Incomplete order banner: set when customer left without paying
   const [incompleteOrderId, setIncompleteOrderId] = useState(null);
+
+  // ── My Orders (shared so MyBookings refreshes after payment) ─────────────
+  const [myOrders, setMyOrders] = useState([]);
+  const [myOrdersLoading, setMyOrdersLoading] = useState(false);
+
+  const refreshMyOrders = async (token) => {
+    const t = token ?? userToken;
+    if (!t) return;
+    setMyOrdersLoading(true);
+    try {
+      const res = await userApi.getMyOrders(t);
+      const data = res?.data ?? res;
+      setMyOrders(Array.isArray(data) ? data : []);
+    } catch (_) {}
+    finally { setMyOrdersLoading(false); }
+  };
 
   useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,10 +131,14 @@ export function AppProvider({ children }) {
           console.log(`[HitPay] confirm attempt ${i} orderId=${orderId} payId=${payId}`);
           const resp    = await paymentApi.confirmPayment(parseInt(orderId, 10), payId);
           const result  = resp?.data ?? resp;
-          const ref     = result?.order_ref ?? result?.data?.order_ref ?? null;
-          console.log('[HitPay] confirm success, order_ref=', ref, 'full=', result);
+          const ref   = result?.order_ref ?? result?.data?.order_ref ?? null;
+          const total = result?.total_price ?? result?.data?.total_price ?? null;
+          console.log('[HitPay] confirm success, order_ref=', ref, 'total=', total);
           setOrderRef(ref);
+          if (total !== null) setConfirmedTotal(total);
           setPayState('success');
+          // Read token from localStorage — userToken state may not be restored yet
+          refreshMyOrders(localStorage.getItem('user_token'));
           return;
         } catch (err) {
           console.error(`[HitPay] confirm attempt ${i} failed:`, err?.message ?? err);
@@ -127,7 +151,9 @@ export function AppProvider({ children }) {
         const order     = orderResp?.data ?? orderResp;
         if (order?.payment_status === 'succeeded') {
           setOrderRef(order.order_ref ?? null);
+          if (order.total_price != null) setConfirmedTotal(parseFloat(order.total_price));
           setPayState('success');
+          refreshMyOrders(localStorage.getItem('user_token'));
           return;
         }
       } catch (_) {}
@@ -282,7 +308,9 @@ export function AppProvider({ children }) {
       // Payment
       paymentMethod, setPaymentMethod,
       payState, setPayState,
+      confirmedTotal,
       orderRef, setOrderRef,
+      myOrders, setMyOrders, myOrdersLoading, refreshMyOrders,
       incompleteOrderId, setIncompleteOrderId,
       // User auth
       user, userToken, showAuthModal, setShowAuthModal,

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { orderApi, paymentApi, locationApi } from '../services/api';
 
@@ -6,9 +6,10 @@ export default function Checkout() {
   const {
     cart, cartTotal, delivery,
     payState, setPayState,
-    orderRef, setOrderRef, setCart, setToast, setPage,
+    orderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
-    user, userToken,
+    confirmedTotal,
+    user, setShowAuthModal,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -52,7 +53,6 @@ export default function Checkout() {
   const displayDelivery = deliveryType === 'pickup' ? 0 : delivery;
   const displayTotal    = cartTotal + displayDelivery;
 
-  const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -102,10 +102,13 @@ export default function Checkout() {
   };
 
   const handlePayment = async () => {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
     const order = await handleCreateOrder();
     if (!order) return;
 
-    setCurrentOrderId(order.id);
     setPayState('processing');
     try {
       const resp = await paymentApi.createPayment(
@@ -179,7 +182,7 @@ export default function Checkout() {
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>
             <span>Total Paid</span>
-            <span style={{ color: 'var(--green)' }}>${displayTotal} SGD</span>
+            <span style={{ color: 'var(--green)' }}>${confirmedTotal ?? displayTotal} SGD</span>
           </div>
         </div>
 

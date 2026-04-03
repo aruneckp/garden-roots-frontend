@@ -83,24 +83,17 @@ function FeedbackSection({ order, token, onUpdated }) {
 }
 
 export default function MyBookings() {
-  const { user, userToken, setPage } = useApp();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user, userToken, setPage, myOrders, setMyOrders, myOrdersLoading, refreshMyOrders, setShowAuthModal } = useApp();
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!userToken) return;
-    userApi.getMyOrders(userToken)
-      .then(res => {
-        const data = res?.data ?? res;
-        setOrders(Array.isArray(data) ? data : []);
-      })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+    // Always refresh when landing on My Bookings to get latest data
+    refreshMyOrders(userToken).catch(err => setError(err.message));
   }, [userToken]);
 
   const handleFeedbackUpdated = (updatedOrder) => {
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    setMyOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
   };
 
   if (!user) {
@@ -110,7 +103,8 @@ export default function MyBookings() {
           <div className="bookings-empty-icon">🔐</div>
           <h2>Please sign in</h2>
           <p>Log in with Google to see your order history.</p>
-          <button className="btn-primary" onClick={() => setPage('home')}>Back to Home</button>
+          <button className="btn-primary" onClick={() => setShowAuthModal(true)}>Sign In</button>
+          <button className="btn-continue" style={{ marginTop: 10 }} onClick={() => setPage('home')}>Back to Home</button>
         </div>
       </div>
     );
@@ -123,21 +117,21 @@ export default function MyBookings() {
         <p className="bookings-sub">Order history for {user.email}</p>
       </div>
 
-      {loading && (
+      {myOrdersLoading && (
         <div className="bookings-loading">
           <div className="spinner" />
           <p>Loading your orders…</p>
         </div>
       )}
 
-      {error && (
+      {!myOrdersLoading && error && (
         <div className="bookings-error">
           <p>Could not load orders: {error}</p>
-          <button className="btn-outline" onClick={() => window.location.reload()}>Retry</button>
+          <button className="btn-outline" onClick={() => refreshMyOrders(userToken)}>Retry</button>
         </div>
       )}
 
-      {!loading && !error && orders.length === 0 && (
+      {!myOrdersLoading && !error && myOrders.length === 0 && (
         <div className="bookings-empty">
           <div className="bookings-empty-icon">🥭</div>
           <h2>No orders yet</h2>
@@ -146,9 +140,9 @@ export default function MyBookings() {
         </div>
       )}
 
-      {!loading && !error && orders.length > 0 && (
+      {!myOrdersLoading && !error && myOrders.length > 0 && (
         <div className="bookings-list">
-          {orders.map(order => {
+          {myOrders.map(order => {
             const statusMeta = STATUS_META[order.order_status] || { label: order.order_status, color: '#6B7280', icon: '📋', desc: '' };
             const isDelivered = order.order_status === 'delivered';
             const isPaid      = order.payment_status === 'succeeded';

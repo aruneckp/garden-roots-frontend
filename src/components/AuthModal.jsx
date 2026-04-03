@@ -18,12 +18,16 @@ export default function AuthModal() {
     if (!showAuthModal || step !== 'login') return;
     if (!window.google) return;
 
+    // Cancel if already initialised (React StrictMode fires effects twice in dev)
+    let cancelled = false;
+
     window.google.accounts.id.initialize({
       client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
+      callback: (response) => { if (!cancelled) handleGoogleCredential(response); },
     });
 
     if (googleBtnRef.current) {
+      googleBtnRef.current.innerHTML = '';
       window.google.accounts.id.renderButton(googleBtnRef.current, {
         theme: 'outline',
         size: 'large',
@@ -32,6 +36,8 @@ export default function AuthModal() {
         width: 280,
       });
     }
+
+    return () => { cancelled = true; };
   }, [showAuthModal, step]);
 
   const handleGoogleCredential = async (response) => {
