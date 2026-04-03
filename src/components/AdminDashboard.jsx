@@ -109,7 +109,7 @@ export default function AdminDashboard({ onLogout }) {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
 
-  const token = localStorage.getItem('user_token');
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
   const user = JSON.parse(localStorage.getItem('admin_user') || '{}');
 
   const headers = {
@@ -492,6 +492,7 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('admin_token');
     localStorage.removeItem('user_token');
     localStorage.removeItem('admin_user');
     onLogout();
