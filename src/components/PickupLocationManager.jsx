@@ -20,7 +20,7 @@ export default function PickupLocationManager() {
     notes: '',
   });
 
-  const token = localStorage.getItem('admin_token');
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
   const headers = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',

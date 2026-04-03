@@ -19,7 +19,7 @@ export default function PaymentTracker() {
     description: '',
   });
 
-  const token = localStorage.getItem('admin_token');
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
   const headers = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': 'application/json',
