@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
+import { API_BASE } from '../services/api';
 
 /** Inline shipment picker used inside the expanded order detail row. */
 function ShipmentSelect({ shipments, currentId, onSave }) {
@@ -155,7 +156,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const fetchDeliveryBoys = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/delivery-boys', { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-boys`, { headers });
       if (res.ok) setDeliveryBoys(await res.json());
     } catch (_) {}
   };
@@ -165,7 +166,7 @@ export default function AdminDashboard({ onLogout }) {
       const params = new URLSearchParams();
       if (filters.shipment_id) params.set('shipment_id', filters.shipment_id);
       if (filters.order_status) params.set('order_status', filters.order_status);
-      const res = await fetch(`http://localhost:8000/api/v1/admin/orders/unassigned?${params}`, { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/unassigned?${params}`, { headers });
       if (res.ok) setUnassignedOrders(await res.json());
     } catch (_) {}
   };
@@ -178,7 +179,7 @@ export default function AdminDashboard({ onLogout }) {
       if (filters.shipment_id) params.set('shipment_id', filters.shipment_id);
       if (filters.order_status) params.set('order_status', filters.order_status);
       if (filters.delivery_code) params.set('delivery_code', filters.delivery_code);
-      const res = await fetch(`http://localhost:8000/api/v1/admin/orders/assigned?${params}`, { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/assigned?${params}`, { headers });
       if (res.ok) setAssignedOrders(await res.json());
     } catch (_) {}
     finally { setAssignedLoading(false); }
@@ -186,7 +187,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const fetchNullShipmentCount = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/orders/null-shipment-count', { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/null-shipment-count`, { headers });
       if (res.ok) { const d = await res.json(); setNullShipmentCount(d.count); }
     } catch (_) {}
   };
@@ -195,7 +196,7 @@ export default function AdminDashboard({ onLogout }) {
     if (!backfillShipmentId) return;
     setBackfillLoading(true); setBackfillResult(null);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/orders/bulk-shipment', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-shipment`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ shipment_id: Number(backfillShipmentId), only_null: onlyNull }),
@@ -237,7 +238,7 @@ export default function AdminDashboard({ onLogout }) {
       if (filters.payment_method) params.set('payment_method', filters.payment_method);
       if (filters.date_from) params.set('date_from', filters.date_from);
       if (filters.date_to) params.set('date_to', filters.date_to);
-      const res = await fetch(`http://localhost:8000/api/v1/admin/orders?${params}`, { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders?${params}`, { headers });
       if (res.ok) setAllOrders(await res.json());
     } catch (_) {}
     finally { setOrdersLoading(false); }
@@ -245,7 +246,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const fetchAdminPickupLocations = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/pickup-locations', { headers });
+      const res = await fetch(`${API_BASE}/api/v1/admin/pickup-locations`, { headers });
       if (res.ok) setAdminPickupLocations(await res.json());
     } catch (_) {}
   };
@@ -267,7 +268,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const handleUpdateOrderShipment = async (orderId, shipmentId) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/admin/orders/${orderId}/shipment`, {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/${orderId}/shipment`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({ shipment_id: shipmentId || null }),
@@ -282,7 +283,7 @@ export default function AdminDashboard({ onLogout }) {
   const handleBulkStatusUpdate = async () => {
     if (!bulkStatus || orderSelectedIds.length === 0) return;
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/orders/bulk-status', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
         method: 'PUT',
         headers,
         body: JSON.stringify({ order_ids: orderSelectedIds, new_status: bulkStatus, note: bulkNote || null }),
@@ -303,7 +304,7 @@ export default function AdminDashboard({ onLogout }) {
     e.preventDefault();
     setDbLoading(true); setDbError(''); setDbSuccess('');
     try {
-      const res = await fetch('http://localhost:8000/api/v1/admin/delivery-boys', {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-boys`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify(dbForm),
@@ -320,7 +321,7 @@ export default function AdminDashboard({ onLogout }) {
     if (!selectedBoyId || !deliveryDate || selectedOrderIds.length === 0) return;
     setAssignLoading(true); setAssignResult(null);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/admin/delivery-boys/${selectedBoyId}/assign`, {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-boys/${selectedBoyId}/assign`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_ids: selectedOrderIds, delivery_date: deliveryDate }),
@@ -350,7 +351,7 @@ export default function AdminDashboard({ onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/dashboard/summary', {
+      const response = await fetch(`${API_BASE}/api/v1/admin/dashboard/summary`, {
         headers,
       });
       if (!response.ok) throw new Error('Failed to fetch dashboard');
@@ -367,7 +368,7 @@ export default function AdminDashboard({ onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/shipments', {
+      const response = await fetch(`${API_BASE}/api/v1/admin/shipments`, {
         headers,
       });
       if (!response.ok) throw new Error('Failed to fetch shipments');
@@ -385,7 +386,7 @@ export default function AdminDashboard({ onLogout }) {
     setError('');
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/shipments/${shipmentId}/summary`,
+        `${API_BASE}/api/v1/admin/shipments/${shipmentId}/summary`,
         { headers }
       );
       if (!response.ok) {
@@ -407,7 +408,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const fetchAllProducts = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/products');
+      const response = await fetch(`${API_BASE}/api/v1/products');
       if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
       setAllProducts(data.data || []);
@@ -422,7 +423,7 @@ export default function AdminDashboard({ onLogout }) {
     setProductVariants([]);
     setVarietyBoxCounts({});
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/products/${productId}/variants`);
+      const response = await fetch(`${API_BASE}/api/v1/products/${productId}/variants`);
       if (!response.ok) throw new Error('Failed to fetch variants');
       const data = await response.json();
       setProductVariants(data.data || []);
@@ -469,7 +470,7 @@ export default function AdminDashboard({ onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/shipments', {
+      const response = await fetch(`${API_BASE}/api/v1/admin/shipments`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),

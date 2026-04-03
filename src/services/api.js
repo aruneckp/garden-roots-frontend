@@ -11,7 +11,7 @@
  *  - Prod: Set VITE_API_URL=https://api.gardenroots.sg in .env
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+export const API_BASE = import.meta.env.VITE_API_URL || '';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 // ---------------------------------------------------------------------------

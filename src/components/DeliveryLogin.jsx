@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { API_BASE } from '../services/api';
 
 export default function DeliveryLogin({ onLoginSuccess }) {
   const [username, setUsername] = useState('');
@@ -11,7 +12,7 @@ export default function DeliveryLogin({ onLoginSuccess }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/delivery/login`, {
+      const res = await fetch(`${API_BASE}/api/v1/delivery/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

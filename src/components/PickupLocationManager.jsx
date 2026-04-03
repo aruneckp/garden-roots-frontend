@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './AdminDashboard.css';
+import { API_BASE } from '../services/api';
 
 export default function PickupLocationManager() {
   const [locations, setLocations] = useState([]);
@@ -33,7 +34,7 @@ export default function PickupLocationManager() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/pickup-locations', { headers });
+      const response = await fetch(`${API_BASE}/api/v1/admin/pickup-locations`, { headers });
       if (!response.ok) throw new Error('Failed to fetch locations');
       const data = await response.json();
       setLocations(data);
@@ -57,7 +58,7 @@ export default function PickupLocationManager() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/pickup-locations', {
+      const response = await fetch(`${API_BASE}/api/v1/admin/pickup-locations`, {
         method: 'POST',
         headers,
         body: JSON.stringify(formData),
@@ -85,7 +86,7 @@ export default function PickupLocationManager() {
   const getOccupancy = async (locationId) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/pickup-locations/${locationId}/occupancy`,
+        `${API_BASE}/api/v1/admin/pickup-locations/${locationId}/occupancy`,
         { headers }
       );
       if (response.ok) {

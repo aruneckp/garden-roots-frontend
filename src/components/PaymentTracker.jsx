@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './AdminDashboard.css';
+import { API_BASE } from '../services/api';
 
 export default function PaymentTracker() {
   const [shipments, setShipments] = useState([]);
@@ -36,7 +37,7 @@ export default function PaymentTracker() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/shipments', { headers });
+      const response = await fetch(`${API_BASE}/api/v1/admin/shipments`, { headers });
       if (!response.ok) throw new Error('Failed to fetch shipments');
       const data = await response.json();
       setShipments(data);
@@ -50,7 +51,7 @@ export default function PaymentTracker() {
   const fetchPaymentSummary = async (shipmentId) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/shipments/${shipmentId}/payments`,
+        `${API_BASE}/api/v1/admin/shipments/${shipmentId}/payments`,
         { headers }
       );
       if (response.ok) {
@@ -67,7 +68,7 @@ export default function PaymentTracker() {
     setError('');
     try {
       const response = await fetch(
-        'http://localhost:8000/api/v1/admin/payments/pending',
+        `${API_BASE}/api/v1/admin/payments/pending`,
         { headers }
       );
       if (!response.ok) throw new Error('Failed to fetch pending payments');
@@ -98,7 +99,7 @@ export default function PaymentTracker() {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/payments', {
+      const response = await fetch(`${API_BASE}/api/v1/admin/payments`, {
         method: 'POST',
         headers,
         body: JSON.stringify(paymentData),

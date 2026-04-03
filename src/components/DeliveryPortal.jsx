@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE } from '../services/api';
 
 export default function DeliveryPortal({ onLogout }) {
   const [deliveryCode, setDeliveryCode] = useState(null);
@@ -18,7 +19,7 @@ export default function DeliveryPortal({ onLogout }) {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/delivery/my-orders', {
+      const res = await fetch(`${API_BASE}/api/v1/delivery/my-orders`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to load orders');
@@ -32,7 +33,7 @@ export default function DeliveryPortal({ onLogout }) {
   const markDelivered = async (orderId) => {
     setMarking(orderId);
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/delivery/orders/${orderId}/delivered`, {
+      const res = await fetch(`${API_BASE}/api/v1/delivery/orders/${orderId}/delivered`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
