@@ -50,6 +50,10 @@ export default function Footer() {
         </div>
       </div>
       <div className="footer-copy">© 2026 Garden Roots · All Rights Reserved</div>
+      <div style={{ textAlign: 'center', marginTop: '8px' }}>
+        <a href="/admin" style={{ color: 'rgba(255,255,255,0.08)', fontSize: '10px', textDecoration: 'none', margin: '0 8px' }}>Admin</a>
+        <a href="/delivery" style={{ color: 'rgba(255,255,255,0.08)', fontSize: '10px', textDecoration: 'none', margin: '0 8px' }}>Delivery</a>
+      </div>
     </footer>
   );
 }
