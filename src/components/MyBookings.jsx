@@ -85,6 +85,9 @@ function FeedbackSection({ order, token, onUpdated }) {
 export default function MyBookings() {
   const { user, userToken, setPage, myOrders, setMyOrders, myOrdersLoading, refreshMyOrders, setShowAuthModal } = useApp();
   const [error, setError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const toggleExpand = (id) => setExpandedId(prev => prev === id ? null : id);
 
   useEffect(() => {
     if (!userToken) return;
@@ -152,86 +155,95 @@ export default function MyBookings() {
               day: 'numeric', month: 'short', year: 'numeric',
             });
 
+            const isExpanded = expandedId === order.id;
+
             return (
               <div className={`booking-card${isDelivered ? ' booking-card--delivered' : ''}`} key={order.id}>
 
-                {/* Header: ref, date, status badge */}
-                <div className="booking-card-header">
+                {/* Collapsed row — always visible, click to expand */}
+                <div
+                  className="booking-card-header"
+                  onClick={() => toggleExpand(order.id)}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                >
                   <div>
                     <div className="booking-ref">{order.order_ref}</div>
-                    <div className="booking-date">{date}</div>
+                    <div className="booking-date">{date} · ${parseFloat(order.total_price).toFixed(2)} SGD</div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span className="booking-status" style={{ color: statusMeta.color, borderColor: statusMeta.color }}>
                       {statusMeta.icon} {statusMeta.label}
                     </span>
-                    {statusMeta.desc && (
-                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3 }}>{statusMeta.desc}</div>
-                    )}
+                    <span style={{ fontSize: 22, color: '#16A34A', fontWeight: 700, lineHeight: 1 }}>{isExpanded ? '−' : '+'}</span>
                   </div>
                 </div>
 
-                {/* Items */}
-                <div className="booking-items">
-                  {order.order_items.map((item, i) => (
-                    <div className="booking-item" key={i}>
-                      <span>Variant #{item.product_variant_id}</span>
-                      <span>×{item.quantity}</span>
-                      <span>${parseFloat(item.subtotal).toFixed(2)}</span>
+                {/* Expanded details */}
+                {isExpanded && (
+                  <>
+                    {/* Items */}
+                    <div className="booking-items">
+                      {order.order_items.map((item, i) => (
+                        <div className="booking-item" key={i}>
+                          <span>Variant #{item.product_variant_id}</span>
+                          <span>×{item.quantity}</span>
+                          <span>${parseFloat(item.subtotal).toFixed(2)}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
 
-                {/* Fulfilment info */}
-                <div className="booking-fulfilment">
-                  <span className="booking-fulfilment-badge">
-                    {isPickup ? '🏪 Self-Pickup' : '🚚 Home Delivery'}
-                  </span>
-                  {isPickup && order.pickup_location && (
-                    <div className="booking-fulfilment-detail">
-                      {order.pickup_location.name} — {order.pickup_location.address}
-                      {order.pickup_location.whatsapp_phone && (
-                        <a
-                          href={`https://wa.me/${order.pickup_location.whatsapp_phone.replace(/\D/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ marginLeft: 8, color: '#25D366', fontWeight: 600 }}
-                        >
-                          💬 WhatsApp
-                        </a>
+                    {/* Fulfilment info */}
+                    <div className="booking-fulfilment">
+                      <span className="booking-fulfilment-badge">
+                        {isPickup ? '🏪 Self-Pickup' : '🚚 Home Delivery'}
+                      </span>
+                      {isPickup && order.pickup_location && (
+                        <div className="booking-fulfilment-detail">
+                          {order.pickup_location.name} — {order.pickup_location.address}
+                          {order.pickup_location.whatsapp_phone && (
+                            <a
+                              href={`https://wa.me/${order.pickup_location.whatsapp_phone.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ marginLeft: 8, color: '#25D366', fontWeight: 600 }}
+                            >
+                              💬 WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {!isPickup && order.delivery_address && (
+                        <div className="booking-fulfilment-detail">📍 {order.delivery_address}</div>
                       )}
                     </div>
-                  )}
-                  {!isPickup && order.delivery_address && (
-                    <div className="booking-fulfilment-detail">📍 {order.delivery_address}</div>
-                  )}
-                </div>
 
-                {/* Order notes entered at checkout */}
-                {order.customer_notes && (
-                  <div className="booking-notes">
-                    <span className="booking-notes-label">📝 Your order notes:</span>
-                    <span className="booking-notes-text">{order.customer_notes}</span>
-                  </div>
+                    {/* Order notes */}
+                    {order.customer_notes && (
+                      <div className="booking-notes">
+                        <span className="booking-notes-label">📝 Your order notes:</span>
+                        <span className="booking-notes-text">{order.customer_notes}</span>
+                      </div>
+                    )}
+
+                    {/* Footer: totals + payment */}
+                    <div className="booking-card-footer">
+                      <div className="booking-total">
+                        <span>Total</span>
+                        <strong>${parseFloat(order.total_price).toFixed(2)} SGD</strong>
+                      </div>
+                      <div className={`booking-payment ${order.payment_status}`}>
+                        Payment: {isPaid ? '✅ Paid' : order.payment_status}
+                      </div>
+                    </div>
+
+                    {/* Feedback */}
+                    <FeedbackSection
+                      order={order}
+                      token={userToken}
+                      onUpdated={handleFeedbackUpdated}
+                    />
+                  </>
                 )}
-
-                {/* Footer: totals + payment */}
-                <div className="booking-card-footer">
-                  <div className="booking-total">
-                    <span>Total</span>
-                    <strong>${parseFloat(order.total_price).toFixed(2)} SGD</strong>
-                  </div>
-                  <div className={`booking-payment ${order.payment_status}`}>
-                    Payment: {isPaid ? '✅ Paid' : order.payment_status}
-                  </div>
-                </div>
-
-                {/* Feedback section — available for all paid orders */}
-                <FeedbackSection
-                  order={order}
-                  token={userToken}
-                  onUpdated={handleFeedbackUpdated}
-                />
 
               </div>
             );

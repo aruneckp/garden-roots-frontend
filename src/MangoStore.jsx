@@ -17,6 +17,8 @@ import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import AuthModal from './components/AuthModal';
 import MyBookings from './components/MyBookings';
+import DeliveryLogin from './components/DeliveryLogin';
+import DeliveryPortal from './components/DeliveryPortal';
 
 function StoreContent() {
   const { page, toast, showAuthModal } = useApp();
@@ -39,7 +41,7 @@ function StoreContent() {
           <Hero />
           <VarietiesSection />
           <WhyUs />
-          <Reviews />
+          {/* <Reviews /> */}
           <Newsletter />
         </>
       )}
@@ -55,35 +57,26 @@ function StoreContent() {
   );
 }
 
-function AdminContent({ onLogout }) {
-  return <AdminDashboard onLogout={onLogout} />;
-}
 
 export default function MangoStore() {
   const [showAdmin, setShowAdmin] = useState(false);
-  const [isAdminReady, setIsAdminReady] = useState(false);
+  const [showDelivery, setShowDelivery] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    // Check if admin token exists
-    const token = localStorage.getItem('admin_token');
-    const isAdminPage = window.location.pathname.includes('/admin');
+    const isAdminPage    = window.location.pathname.includes('/admin');
+    const isDeliveryPage = window.location.pathname.includes('/delivery');
 
-    if (token && isAdminPage) {
-      setShowAdmin(true);
-    } else if (isAdminPage && !token) {
-      // User is trying to access admin without token, show login
-      setShowAdmin(true);
-    }
+    if (isAdminPage) setShowAdmin(true);
+    if (isDeliveryPage) setShowDelivery(true);
 
-    setIsAdminReady(true);
+    setIsReady(true);
   }, []);
 
   const handleAdminLoginSuccess = () => {
     setShowAdmin(true);
-    // Keep the user on admin page
-    if (!window.location.pathname.includes('/admin')) {
+    if (!window.location.pathname.includes('/admin'))
       window.history.pushState({}, '', '/admin');
-    }
   };
 
   const handleAdminLogout = () => {
@@ -93,20 +86,36 @@ export default function MangoStore() {
     window.location.href = '/';
   };
 
-  if (!isAdminReady) {
-    return <div>Loading...</div>;
+  const handleDeliveryLoginSuccess = () => {
+    setShowDelivery(true);
+    if (!window.location.pathname.includes('/delivery'))
+      window.history.pushState({}, '', '/delivery');
+  };
+
+  const handleDeliveryLogout = () => {
+    localStorage.removeItem('delivery_token');
+    localStorage.removeItem('delivery_user');
+    setShowDelivery(false);
+    window.location.href = '/';
+  };
+
+  if (!isReady) return <div>Loading...</div>;
+
+  // Delivery portal
+  if (showDelivery) {
+    const token = localStorage.getItem('delivery_token');
+    if (!token) return <DeliveryLogin onLoginSuccess={handleDeliveryLoginSuccess} />;
+    return <DeliveryPortal onLogout={handleDeliveryLogout} />;
   }
 
-  // Show admin panel if user is on /admin or has token
+  // Admin panel
   if (showAdmin) {
     const token = localStorage.getItem('admin_token');
-    if (!token) {
-      return <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />;
-    }
-    return <AdminContent onLogout={handleAdminLogout} />;
+    if (!token) return <AdminLogin onLoginSuccess={handleAdminLoginSuccess} />;
+    return <AdminDashboard onLogout={handleAdminLogout} />;
   }
 
-  // Show store
+  // Customer store
   return (
     <AppProvider>
       <StoreContent />
