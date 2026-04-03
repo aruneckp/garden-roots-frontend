@@ -94,6 +94,10 @@ export function AppProvider({ children }) {
   };
 
   useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [page]);
+
+  useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatTyping, chatOpen]);
 

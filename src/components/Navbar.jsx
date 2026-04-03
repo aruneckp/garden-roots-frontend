@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { page, setPage, cartCount, user, logoutUser, setShowAuthModal } = useApp();
+  const { setPage, cartCount, user, logoutUser, setShowAuthModal } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef(null);
@@ -35,6 +35,17 @@ export default function Navbar() {
 
       <nav className="nav" ref={navRef}>
         <div className="nav-inner">
+          {/* Hamburger button — mobile only, left side */}
+          <button
+            className={`hamburger${mobileOpen ? ' open' : ''}`}
+            onClick={() => setMobileOpen(prev => !prev)}
+            aria-label="Toggle navigation menu"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+
           <div className="logo" onClick={() => { setPage('home'); setMobileOpen(false); }}>
             {'🌿 Garden'}<span>{'Roots'}</span>
           </div>
@@ -90,16 +101,6 @@ export default function Navbar() {
               </button>
             )}
 
-            {/* Hamburger button — mobile only */}
-            <button
-              className={`hamburger${mobileOpen ? ' open' : ''}`}
-              onClick={() => setMobileOpen(prev => !prev)}
-              aria-label="Toggle navigation menu"
-            >
-              <span></span>
-              <span></span>
-              <span></span>
-            </button>
           </div>
         </div>
 

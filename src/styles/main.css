@@ -150,10 +150,10 @@ body {
 
 /* HERO */
 .hero {
-  min-height: 88vh;
+  min-height: 70vh;
   background: linear-gradient(135deg, #14532D 0%, #166534 40%, #15803D 100%);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   position: relative;
   overflow: hidden;
 }
@@ -166,7 +166,7 @@ body {
 .hero-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 80px 24px;
+  padding: 16px 24px 40px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 60px;
@@ -178,7 +178,8 @@ body {
 .hero-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  overflow: hidden;
+  max-width: 280px;
   background: rgba(245,158,11,0.15);
   border: 1px solid rgba(245,158,11,0.4);
   color: var(--mango);
@@ -189,6 +190,15 @@ body {
   letter-spacing: 1px;
   text-transform: uppercase;
   margin-bottom: 20px;
+}
+.hero-badge-ticker {
+  display: inline-block;
+  white-space: nowrap;
+  animation: badgeTicker 6s linear infinite;
+}
+@keyframes badgeTicker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 .hero h1 {
   font-family: 'Playfair Display', serif;

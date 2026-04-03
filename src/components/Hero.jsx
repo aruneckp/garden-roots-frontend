@@ -7,12 +7,14 @@ export default function Hero() {
     <section className="hero">
       <div className="hero-inner">
         <div>
-          <div className="hero-badge">✦ Season 2026 Now Open</div>
+          <div className="hero-badge">
+            <span className="hero-badge-ticker">✦ Season 2026 <span style={{color:'#EF4444'}}>Opening Soon</span> &nbsp;&nbsp;&nbsp; ✦ Season 2026 <span style={{color:'#EF4444'}}>Opening Soon</span> &nbsp;&nbsp;&nbsp;</span>
+          </div>
           <h1>Home of Premium <em>Indian Mangoes</em></h1>
           <p>Experience the authentic taste of India's finest orchards, air-flown fresh straight to your door anywhere in Singapore.</p>
           <div className="hero-buttons">
             <button className="btn-hero" onClick={() => document.getElementById('varieties')?.scrollIntoView({ behavior: 'smooth' })}>
-              Explore Varieties
+              Order Now
             </button>
             <button className="btn-hero-ghost" onClick={() => setPage('about-us')}>Our Story →</button>
           </div>
