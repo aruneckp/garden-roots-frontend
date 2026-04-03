@@ -408,7 +408,7 @@ export default function AdminDashboard({ onLogout }) {
 
   const fetchAllProducts = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/v1/products');
+      const response = await fetch(`${API_BASE}/api/v1/products`);
       if (!response.ok) throw new Error('Failed to fetch products');
       const data = await response.json();
       setAllProducts(data.data || []);
