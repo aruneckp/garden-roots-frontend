@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,   // fail fast if 5173 is taken — prevents silent CORS port drift
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      },
       proxy: {
         // In dev, forward /api calls to the backend so CORS is never needed
         '/api': {
