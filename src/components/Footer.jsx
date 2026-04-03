@@ -17,7 +17,7 @@ export default function Footer() {
             <a className="social-link fb" href="https://facebook.com" target="_blank" rel="noreferrer" title="Facebook">f</a>
             <a className="social-link ig" href="https://instagram.com" target="_blank" rel="noreferrer" title="Instagram">📸</a>
             <a className="social-link li" href="https://linkedin.com" target="_blank" rel="noreferrer" title="LinkedIn">in</a>
-            <a className="social-link wa" href="https://wa.me/6591555947" target="_blank" rel="noreferrer" title="WhatsApp">💬</a>
+            <a className="social-link wa" href="https://wa.me/6581601289" target="_blank" rel="noreferrer" title="WhatsApp">💬</a>
           </div>
         </div>
 
@@ -34,7 +34,7 @@ export default function Footer() {
           <h4>Get in Touch</h4>
           <ul>
             <li>info@gardenroots.com.sg</li>
-            <li>+65 9155 5947</li>
+            <li>+65 8160 1289</li>
             <li>Mon–Sat: 9am–6pm SGT</li>
           </ul>
         </div>
@@ -42,7 +42,7 @@ export default function Footer() {
         <div>
           <h4>Connect With Us</h4>
           <ul>
-            <li><a href="https://wa.me/6591555947" target="_blank" rel="noreferrer" style={{ color: '#25D366', textDecoration: 'none' }}>💬 WhatsApp Us</a></li>
+            <li><a href="https://wa.me/6581601289" target="_blank" rel="noreferrer" style={{ color: '#25D366', textDecoration: 'none' }}>💬 WhatsApp Us</a></li>
             <li><a href="https://instagram.com" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>📸 Instagram</a></li>
             <li><a href="https://facebook.com" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>👍 Facebook</a></li>
             <li><a href="https://linkedin.com" target="_blank" rel="noreferrer" style={{ color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}>💼 LinkedIn</a></li>

@@ -164,7 +164,7 @@ export default function Chatbot() {
       {/* WhatsApp FAB — secondary, below chatbot */}
       <a
         className="wa-fab"
-        href="https://wa.me/6591555947?text=Hi Garden Roots! I'd like to enquire about your mangoes."
+        href="https://wa.me/6581601289?text=Hi Garden Roots! I'd like to enquire about your mangoes."
         target="_blank"
         rel="noreferrer"
         title="Chat on WhatsApp"

@@ -24,14 +24,14 @@ export default function ContactUs() {
             <span className="contact-info-icon">📞</span>
             <div>
               <strong>Phone</strong>
-              <a href="tel:+6591555947">+65 9155 5947</a>
+              <a href="tel:+6581601289">+65 8160 1289</a>
             </div>
           </div>
           <div className="contact-info-item">
             <span className="contact-info-icon">💬</span>
             <div>
               <strong>WhatsApp</strong>
-              <a href="https://wa.me/6591555947" target="_blank" rel="noreferrer">+65 9155 5947</a>
+              <a href="https://wa.me/6581601289" target="_blank" rel="noreferrer">+65 8160 1289</a>
             </div>
           </div>
           <div className="contact-info-item">
@@ -49,7 +49,7 @@ export default function ContactUs() {
             </div>
           </div>
 
-          <a className="contact-wa-btn" href="https://wa.me/6591555947?text=Hi Garden Roots! I'd like to enquire about your mangoes." target="_blank" rel="noreferrer">
+          <a className="contact-wa-btn" href="https://wa.me/6581601289?text=Hi Garden Roots! I'd like to enquire about your mangoes." target="_blank" rel="noreferrer">
             💬 Chat on WhatsApp
           </a>
         </div>

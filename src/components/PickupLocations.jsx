@@ -26,7 +26,7 @@ export default function PickupLocations() {
               <p className="pickup-hours">🕐 {loc.hours}</p>
               <a
                 className="pickup-wa-btn"
-                href={`https://wa.me/6591555947?text=Hi! I'd like to pick up my order at your ${loc.name} location.`}
+                href={`https://wa.me/6581601289?text=Hi! I'd like to pick up my order at your ${loc.name} location.`}
                 target="_blank"
                 rel="noreferrer"
               >
