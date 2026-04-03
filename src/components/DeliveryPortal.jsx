@@ -9,7 +9,7 @@ export default function DeliveryPortal({ onLogout }) {
   const [marking, setMarking]           = useState(null);
   const [toast, setToast]               = useState('');
 
-  const token = localStorage.getItem('delivery_token');
+  const token = localStorage.getItem('user_token');
   const user  = JSON.parse(localStorage.getItem('delivery_user') || '{}');
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function DeliveryPortal({ onLogout }) {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('delivery_token');
+    localStorage.removeItem('user_token');
     localStorage.removeItem('delivery_user');
     onLogout();
   };
