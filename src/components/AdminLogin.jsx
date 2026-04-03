@@ -13,7 +13,7 @@ export default function AdminLogin({ onLoginSuccess }) {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/admin/login', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
