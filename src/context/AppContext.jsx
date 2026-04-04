@@ -17,6 +17,11 @@ export function AppProvider({ children }) {
   const [userToken, setUserToken] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
+  // ── Admin view mode: 'store' | 'admin' | 'delivery' ───────────────────────
+  // Admins default to customer store so they can book on behalf of customers
+  const [adminView, setAdminView] = useState('store');
+  const [adminInitialTab, setAdminInitialTab] = useState('dashboard');
+
   // Restore session from localStorage on mount
   useEffect(() => {
     const token = localStorage.getItem('user_token');
@@ -319,6 +324,8 @@ export function AppProvider({ children }) {
       // User auth
       user, userToken, showAuthModal, setShowAuthModal,
       loginUser, logoutUser, updateUserPhone,
+      // Admin view mode
+      adminView, setAdminView, adminInitialTab, setAdminInitialTab,
     }}>
       {children}
     </AppContext.Provider>

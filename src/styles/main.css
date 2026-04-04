@@ -68,6 +68,8 @@ body {
   transition: color 0.2s;
 }
 .nav-links a:hover { color: var(--green); }
+.nav-links a.admin-nav-link { color: var(--green); font-weight: 600; }
+.nav-links a.admin-nav-link:hover { opacity: 0.8; }
 .nav-actions { display: flex; gap: 12px; align-items: center; }
 .btn-outline {
   border: 1.5px solid var(--green);

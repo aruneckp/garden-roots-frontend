@@ -17,18 +17,19 @@ import MyBookings from './components/MyBookings';
 import DeliveryPortal from './components/DeliveryPortal';
 
 function StoreContent() {
-  const { page, toast, showAuthModal, user, logoutUser } = useApp();
+  const { page, toast, showAuthModal, user, logoutUser, adminView, adminInitialTab } = useApp();
 
-  // Role-based routing — admin and delivery users go straight to their portals
-  if (user?.role === 'admin') {
-    return <AdminDashboard onLogout={logoutUser} />;
-  }
-
+  // Delivery role always goes to delivery portal
   if (user?.role === 'delivery') {
     return <DeliveryPortal onLogout={logoutUser} />;
   }
 
-  // Default: customer store
+  // Admin: switch between admin dashboard and customer store
+  if (user?.role === 'admin' && adminView === 'admin') {
+    return <AdminDashboard onLogout={logoutUser} defaultTab={adminInitialTab} />;
+  }
+
+  // Default: customer store (admins land here too, so they can book on behalf of customers)
   return (
     <>
       <Navbar />

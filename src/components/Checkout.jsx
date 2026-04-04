@@ -6,7 +6,7 @@ export default function Checkout() {
   const {
     cart, cartTotal, delivery,
     payState, setPayState,
-    orderRef, setCart, setToast, setPage,
+    orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
     user, setShowAuthModal,
@@ -49,6 +49,9 @@ export default function Checkout() {
   // Notes
   const [customerNotes, setCustomerNotes] = useState('');
 
+  // Payment method — admins can choose Pay Later for phone orders
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paynow');
+
   // Effective delivery fee shown in UI
   const displayDelivery = deliveryType === 'pickup' ? 0 : delivery;
   const displayTotal    = cartTotal + displayDelivery;
@@ -86,7 +89,7 @@ export default function Checkout() {
         customerName:      name,
         customerEmail:     email,
         customerPhone:     phone,
-        paymentMethod:     'paynow',
+        paymentMethod:     selectedPaymentMethod,
         deliveryType,
         deliveryAddress:   deliveryType === 'delivery' ? address : null,
         pickupLocationId:  deliveryType === 'pickup'   ? selectedPickupId : null,
@@ -138,6 +141,13 @@ export default function Checkout() {
     }
   };
 
+  const handlePayLater = async () => {
+    const order = await handleCreateOrder();
+    if (!order) return;
+    setOrderRef(order.order_ref);
+    setPayState('success');
+  };
+
   // ── Full-page order confirmation (replaces checkout layout after payment) ──
   if (payState === 'success') {
     return (
@@ -181,17 +191,19 @@ export default function Checkout() {
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>
-            <span>Total Paid</span>
-            <span style={{ color: 'var(--green)' }}>${confirmedTotal ?? displayTotal} SGD</span>
+            <span>{selectedPaymentMethod === 'pay_later' ? 'Amount to Collect' : 'Total Paid'}</span>
+            <span style={{ color: selectedPaymentMethod === 'pay_later' ? '#d97706' : 'var(--green)' }}>${confirmedTotal ?? displayTotal} SGD</span>
           </div>
         </div>
 
         {/* What happens next */}
         <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '16px 20px', marginBottom: 32, textAlign: 'left', fontSize: 14, color: '#78350F', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>What happens next?</div>
-          {deliveryType === 'pickup'
-            ? 'We\'ll prepare your order and notify you when it\'s ready for collection at your selected pickup location.'
-            : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
+          {selectedPaymentMethod === 'pay_later'
+            ? 'Order confirmed. Payment to be collected from the customer. Go to Admin → Orders to mark payment as received once collected.'
+            : deliveryType === 'pickup'
+              ? 'We\'ll prepare your order and notify you when it\'s ready for collection at your selected pickup location.'
+              : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
         </div>
 
         <button
@@ -416,7 +428,34 @@ export default function Checkout() {
                 </div>
               </div>
 
+              {/* Admin: payment method selector */}
+              {user?.role === 'admin' && (
+                <div className="payment-body" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                  <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Payment Method</h4>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      className={`checkout-type-btn${selectedPaymentMethod === 'paynow' ? ' active' : ''}`}
+                      onClick={() => setSelectedPaymentMethod('paynow')}
+                    >
+                      PayNow
+                    </button>
+                    <button
+                      className={`checkout-type-btn${selectedPaymentMethod === 'pay_later' ? ' active' : ''}`}
+                      onClick={() => setSelectedPaymentMethod('pay_later')}
+                    >
+                      💰 Pay Later
+                    </button>
+                  </div>
+                  {selectedPaymentMethod === 'pay_later' && (
+                    <p style={{ fontSize: 12, color: '#78716C', marginTop: 8 }}>
+                      Order confirmed immediately. Payment collected from customer later and updated in admin panel.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* PayNow */}
+              {selectedPaymentMethod === 'paynow' && (
               <div className="payment-body">
                 <div className="paynow-box">
                   <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
@@ -433,6 +472,26 @@ export default function Checkout() {
                   </button>
                 </div>
               </div>
+              )}
+
+              {/* Pay Later — admin only */}
+              {selectedPaymentMethod === 'pay_later' && (
+                <div className="payment-body">
+                  <div className="paynow-box" style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
+                    <div className="paynow-amount">${displayTotal} SGD <span>to collect</span></div>
+                    <div className="paynow-steps" style={{ background: '#fef3c7', borderColor: '#fcd34d' }}>
+                      <strong>Pay Later — Phone/Walk-in Order</strong>
+                      Order will be confirmed immediately.<br />
+                      Payment of <strong>${displayTotal} SGD</strong> to be collected from customer.<br />
+                      Track and update payment in Admin → Orders.
+                    </div>
+                    <button className="btn-checkout" style={{ background: '#d97706' }} onClick={handlePayLater}>
+                      Confirm Order — Collect Payment Later →
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

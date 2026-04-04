@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { setPage, cartCount, user, logoutUser, setShowAuthModal } = useApp();
+  const { setPage, cartCount, user, logoutUser, setShowAuthModal, setAdminView, setAdminInitialTab } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef(null);
@@ -59,6 +59,28 @@ export default function Navbar() {
                 </a>
               </li>
             ))}
+            {user?.role === 'admin' && (
+              <>
+                <li>
+                  <a
+                    href="#"
+                    className="admin-nav-link"
+                    onClick={e => { e.preventDefault(); setAdminInitialTab('dashboard'); setAdminView('admin'); }}
+                  >
+                    🔧 Admin
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="#"
+                    className="admin-nav-link"
+                    onClick={e => { e.preventDefault(); setAdminInitialTab('delivery'); setAdminView('admin'); }}
+                  >
+                    🛵 Delivery
+                  </a>
+                </li>
+              </>
+            )}
           </ul>
 
           <div className="nav-actions">
@@ -128,6 +150,21 @@ export default function Navbar() {
                       My Bookings
                     </a>
                   </li>
+                  {user.role === 'admin' && (
+                    <>
+                      <li className="mobile-nav-divider" />
+                      <li>
+                        <a href="#" className="admin-nav-link" onClick={e => { e.preventDefault(); setAdminInitialTab('dashboard'); setAdminView('admin'); setMobileOpen(false); }}>
+                          🔧 Admin Panel
+                        </a>
+                      </li>
+                      <li>
+                        <a href="#" className="admin-nav-link" onClick={e => { e.preventDefault(); setAdminInitialTab('delivery'); setAdminView('admin'); setMobileOpen(false); }}>
+                          🛵 Delivery Portal
+                        </a>
+                      </li>
+                    </>
+                  )}
                   <li>
                     <a href="#" className="logout-link" onClick={e => { e.preventDefault(); logoutUser(); setMobileOpen(false); }}>
                       Sign Out

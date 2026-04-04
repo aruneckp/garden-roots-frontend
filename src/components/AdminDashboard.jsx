@@ -3,6 +3,7 @@ import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
 import { API_BASE } from '../services/api';
+import { useApp } from '../context/AppContext';
 
 /** Inline shipment picker used inside the expanded order detail row. */
 function ShipmentSelect({ shipments, currentId, onSave }) {
@@ -50,12 +51,356 @@ function ShipmentSelect({ shipments, currentId, onSave }) {
   );
 }
 
-export default function AdminDashboard({ onLogout }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+/** Helper: returns YYYY-MM-DD for a Date object */
+function toDateStr(d) {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Returns {date_from, date_to} for the current Mon–Sun week */
+function currentWeekRange() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return { date_from: toDateStr(mon), date_to: toDateStr(sun) };
+}
+
+/** Full shipments view — inline grid, no popup */
+function ShipmentsView({ shipments, headers, API_BASE }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [shipmentOrders, setShipmentOrders] = useState({});   // { [shipment_id]: order[] }
+  const [orderStats, setOrderStats]     = useState({});        // { [shipment_id]: stats }
+  const [loadingId, setLoadingId]       = useState(null);
+  const [filters, setFilters]           = useState({});        // { [shipment_id]: filterObj }
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
+
+  const defaultFilters = () => ({ ...currentWeekRange(), order_status: '', payment_status: '', delivery_type: '' });
+
+  const getFilters = (sid) => filters[sid] || defaultFilters();
+
+  const fetchOrders = async (sid, f) => {
+    setLoadingId(sid);
+    const p = new URLSearchParams();
+    const fi = f || getFilters(sid);
+    if (fi.order_status)   p.set('order_status',   fi.order_status);
+    if (fi.payment_status) p.set('payment_status', fi.payment_status);
+    if (fi.delivery_type)  p.set('delivery_type',  fi.delivery_type);
+    if (fi.date_from)      p.set('date_from',       fi.date_from);
+    if (fi.date_to)        p.set('date_to',         fi.date_to);
+    try {
+      const [ordersRes, statsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/admin/shipments/${sid}/orders?${p}`, { headers }),
+        fetch(`${API_BASE}/api/v1/admin/shipments/${sid}/order-stats`, { headers }),
+      ]);
+      const orders = ordersRes.ok ? await ordersRes.json() : [];
+      const stats  = statsRes.ok  ? await statsRes.json()  : {};
+      setShipmentOrders(prev => ({ ...prev, [sid]: orders }));
+      setOrderStats(prev => ({ ...prev, [sid]: stats }));
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const toggleShipment = (sid) => {
+    if (expandedId === sid) { setExpandedId(null); return; }
+    setExpandedId(sid);
+    setExpandedOrderId(null);
+    if (!shipmentOrders[sid]) {
+      const f = defaultFilters();
+      setFilters(prev => ({ ...prev, [sid]: f }));
+      fetchOrders(sid, f);
+    }
+  };
+
+  const handleFilterChange = (sid, key, val) => {
+    const updated = { ...getFilters(sid), [key]: val };
+    setFilters(prev => ({ ...prev, [sid]: updated }));
+    fetchOrders(sid, updated);
+  };
+
+  const clearFilters = (sid) => {
+    const f = defaultFilters();
+    setFilters(prev => ({ ...prev, [sid]: f }));
+    fetchOrders(sid, f);
+  };
+
+  const clearDates = (sid) => {
+    const updated = { ...getFilters(sid), date_from: '', date_to: '' };
+    setFilters(prev => ({ ...prev, [sid]: updated }));
+    fetchOrders(sid, updated);
+  };
+
+  if (shipments.length === 0) return <div className="shipments-section"><h2>📦 Shipments</h2><p>No shipments found.</p></div>;
+
+  return (
+    <div className="shipments-section">
+      <h2>📦 All Shipments</h2>
+      {shipments.map(shipment => {
+        const isOpen   = expandedId === shipment.id;
+        const fi       = getFilters(shipment.id);
+        const orders   = shipmentOrders[shipment.id] || [];
+        const stats    = orderStats[shipment.id];
+        const isLoading = loadingId === shipment.id;
+
+        return (
+          <div key={shipment.id} className="shipment-expand-block">
+            {/* ── Shipment header row ── */}
+            <div
+              className={`shipment-header-row ${isOpen ? 'shipment-header-row--open' : ''}`}
+              onClick={() => toggleShipment(shipment.id)}
+            >
+              <div className="shipment-header-left">
+                <span className="shipment-chevron">{isOpen ? '▼' : '▶'}</span>
+                <strong className="shipment-ref">{shipment.shipment_ref}</strong>
+                <span className={`status-badge status-${shipment.status}`}>{shipment.status.toUpperCase()}</span>
+                <span className="shipment-meta">📦 {shipment.total_boxes} boxes</span>
+                {shipment.variety_names?.length > 0 && (
+                  <span className="shipment-meta">🍋 {shipment.variety_names.join(', ')}</span>
+                )}
+              </div>
+              {stats && (
+                <div className="shipment-order-pills">
+                  <span className="pill pill-total">{stats.orders_total} orders</span>
+                  <span className="pill pill-booked">{stats.orders_booked} booked</span>
+                  <span className="pill pill-pending">{stats.orders_pending} pending</span>
+                  <span className="pill pill-transit">{stats.orders_in_transit} in transit</span>
+                  <span className="pill pill-delivered">{stats.orders_delivered} delivered</span>
+                  {stats.orders_yet_to_book > 0 && (
+                    <span className="pill pill-ytb">{stats.orders_yet_to_book} yet to book</span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Expanded detail panel ── */}
+            {isOpen && (
+              <div className="shipment-detail-panel">
+
+                {/* Shipment info grid */}
+                <div className="shipment-info-grid">
+                  <div className="shipment-info-block">
+                    <div className="info-label">Boxes</div>
+                    <div className="info-value">{shipment.total_boxes}</div>
+                  </div>
+                  <div className="shipment-info-block">
+                    <div className="info-label">Status</div>
+                    <div className="info-value">
+                      <span className={`status-badge status-${shipment.status}`}>{shipment.status}</span>
+                    </div>
+                  </div>
+                  {shipment.notes && (
+                    <div className="shipment-info-block" style={{ gridColumn: 'span 2' }}>
+                      <div className="info-label">Notes</div>
+                      <div className="info-value">{shipment.notes}</div>
+                    </div>
+                  )}
+                  {stats && (
+                    <>
+                      <div className="shipment-info-block">
+                        <div className="info-label">Total Orders</div>
+                        <div className="info-value">{stats.orders_total}</div>
+                      </div>
+                      <div className="shipment-info-block">
+                        <div className="info-label" style={{ color: '#16a34a' }}>Booked</div>
+                        <div className="info-value" style={{ color: '#16a34a', fontWeight: 700 }}>{stats.orders_booked}</div>
+                      </div>
+                      <div className="shipment-info-block">
+                        <div className="info-label" style={{ color: '#d97706' }}>Pending</div>
+                        <div className="info-value" style={{ color: '#d97706' }}>{stats.orders_pending}</div>
+                      </div>
+                      <div className="shipment-info-block">
+                        <div className="info-label" style={{ color: '#3b82f6' }}>In Transit</div>
+                        <div className="info-value" style={{ color: '#3b82f6' }}>{stats.orders_in_transit}</div>
+                      </div>
+                      <div className="shipment-info-block">
+                        <div className="info-label" style={{ color: '#10b981' }}>Delivered</div>
+                        <div className="info-value" style={{ color: '#10b981', fontWeight: 700 }}>{stats.orders_delivered}</div>
+                      </div>
+                      <div className="shipment-info-block">
+                        <div className="info-label" style={{ color: '#ef4444' }}>Yet to Book</div>
+                        <div className="info-value" style={{ color: '#ef4444' }}>{stats.orders_yet_to_book}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Orders filter bar */}
+                <div className="shipment-orders-header">
+                  <h4>📋 Orders</h4>
+                  <div className="orders-filter-row" style={{ flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    <select value={fi.order_status} onChange={e => handleFilterChange(shipment.id, 'order_status', e.target.value)} className="orders-filter-select">
+                      <option value="">All Order Status</option>
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="in_transit">In Transit</option>
+                      <option value="delivered">Delivered</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                    <select value={fi.payment_status} onChange={e => handleFilterChange(shipment.id, 'payment_status', e.target.value)} className="orders-filter-select">
+                      <option value="">All Payment</option>
+                      <option value="pending">Pending</option>
+                      <option value="succeeded">Succeeded</option>
+                      <option value="failed">Failed</option>
+                    </select>
+                    <select value={fi.delivery_type} onChange={e => handleFilterChange(shipment.id, 'delivery_type', e.target.value)} className="orders-filter-select">
+                      <option value="">All Modes</option>
+                      <option value="delivery">Home Delivery</option>
+                      <option value="pickup">Self Pickup</option>
+                    </select>
+                    <div className="orders-date-range">
+                      <input type="date" value={fi.date_from} onChange={e => handleFilterChange(shipment.id, 'date_from', e.target.value)} className="orders-date-input" title="From" />
+                      <span className="date-range-sep">→</span>
+                      <input type="date" value={fi.date_to} onChange={e => handleFilterChange(shipment.id, 'date_to', e.target.value)} className="orders-date-input" title="To" />
+                    </div>
+                    <button className="orders-clear-btn" onClick={() => clearDates(shipment.id)}>This week</button>
+                    <button className="orders-clear-btn" onClick={() => clearFilters(shipment.id)}>Reset all</button>
+                    <button className="orders-clear-btn" style={{ background: '#e0f2fe', borderColor: '#7dd3fc' }} onClick={() => fetchOrders(shipment.id, fi)}>Refresh</button>
+                    <span style={{ fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>{orders.length} order(s)</span>
+                  </div>
+                </div>
+
+                {/* Orders table */}
+                {isLoading ? (
+                  <div className="loading" style={{ padding: 16 }}>Loading orders…</div>
+                ) : orders.length === 0 ? (
+                  <p style={{ color: '#6b7280', padding: '12px 0' }}>No orders match the filter.</p>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="shipment-table orders-table">
+                      <thead>
+                        <tr>
+                          <th>Order Ref</th>
+                          <th>Customer</th>
+                          <th>Phone</th>
+                          <th>Mode</th>
+                          <th>Location / Address</th>
+                          <th>Order Status</th>
+                          <th>Payment</th>
+                          <th>Method</th>
+                          <th>Assigned To</th>
+                          <th>Del. Code</th>
+                          <th>Items</th>
+                          <th>Total</th>
+                          <th>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map(o => {
+                          const isExp = expandedOrderId === o.id;
+                          return (
+                            <React.Fragment key={o.id}>
+                              <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedOrderId(isExp ? null : o.id)}>
+                                <td><strong className="order-ref-link">{o.order_ref}</strong></td>
+                                <td>{o.customer_name}</td>
+                                <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
+                                <td>
+                                  <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
+                                    {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
+                                  </span>
+                                </td>
+                                <td className="orders-address-cell">
+                                  {o.delivery_type === 'pickup'
+                                    ? (o.pickup_location_name || `Loc #${o.pickup_location_id}`)
+                                    : (o.delivery_address || '—')}
+                                </td>
+                                <td><span className={`status-badge status-${o.order_status}`}>{o.order_status}</span></td>
+                                <td>
+                                  <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>
+                                    {o.payment_status}
+                                  </span>
+                                </td>
+                                <td style={{ fontSize: 12 }}>{o.payment_method || '—'}</td>
+                                <td style={{ fontSize: 12 }}>
+                                  {o.delivery_boy_name
+                                    ? <span className="assigned-badge">{o.delivery_boy_name}</span>
+                                    : <span style={{ color: '#9ca3af' }}>—</span>}
+                                </td>
+                                <td style={{ fontSize: 11, color: '#6b7280' }}>{o.delivery_code || '—'}</td>
+                                <td style={{ textAlign: 'center', fontSize: 13 }}>
+                                  <button className="items-toggle-btn" onClick={e => { e.stopPropagation(); setExpandedOrderId(isExp ? null : o.id); }}>
+                                    {o.items_count} {isExp ? '▲' : '▼'}
+                                  </button>
+                                </td>
+                                <td><strong>₹{o.total_price}</strong></td>
+                                <td style={{ fontSize: 12 }}>{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+                              </tr>
+                              {isExp && (
+                                <tr className="order-detail-row">
+                                  <td colSpan={13}>
+                                    <div className="order-detail-panel">
+                                      <div className="order-detail-grid">
+                                        <div className="order-detail-block">
+                                          <div className="order-detail-label">Items Ordered</div>
+                                          <table className="order-items-mini-table">
+                                            <thead><tr><th>Product</th><th>Qty</th><th>Unit</th><th>Subtotal</th></tr></thead>
+                                            <tbody>
+                                              {o.items.map((it, idx) => (
+                                                <tr key={idx}>
+                                                  <td>{it.variant}</td>
+                                                  <td>{it.qty}</td>
+                                                  <td>₹{it.unit_price}</td>
+                                                  <td>₹{it.subtotal}</td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                          <div className="order-price-row">
+                                            <span>Delivery fee: ₹{o.delivery_fee}</span>
+                                            <span>Total: <strong>₹{o.total_price}</strong></span>
+                                          </div>
+                                        </div>
+                                        <div className="order-detail-block">
+                                          <div className="order-detail-label">Delivery Info</div>
+                                          <p><strong>Type:</strong> {o.delivery_type === 'pickup' ? 'Self Pickup' : 'Home Delivery'}</p>
+                                          {o.delivery_type === 'pickup'
+                                            ? <p><strong>Location:</strong> {o.pickup_location_name || `#${o.pickup_location_id}`}</p>
+                                            : <p><strong>Address:</strong> {o.delivery_address || '—'}</p>}
+                                          {o.delivery_boy_name && <p><strong>Assigned To:</strong> {o.delivery_boy_name}</p>}
+                                          {o.delivery_code && <p><strong>Del. Code:</strong> {o.delivery_code}</p>}
+                                          {o.assigned_at && <p><strong>Assigned At:</strong> {new Date(o.assigned_at).toLocaleString()}</p>}
+                                          {o.customer_notes && <p><strong>Notes:</strong> {o.customer_notes}</p>}
+                                        </div>
+                                        <div className="order-detail-block">
+                                          <div className="order-detail-label">Customer</div>
+                                          <p>{o.customer_name}</p>
+                                          <p>{o.customer_email || '—'}</p>
+                                          <p>{o.customer_phone || '—'}</p>
+                                          <div className="order-detail-label" style={{ marginTop: 12 }}>Payment</div>
+                                          <p><strong>Status:</strong> {o.payment_status}</p>
+                                          <p><strong>Method:</strong> {o.payment_method || '—'}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <p style={{ color: '#6b7280', fontSize: 13, marginTop: 6 }}>
+                      Showing {orders.length} order(s) · click a row to expand details
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function AdminDashboard({ onLogout, defaultTab }) {
+  const { setAdminView } = useApp();
+  const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
   const [dashboardData, setDashboardData] = useState(null);
   const [shipments, setShipments] = useState([]);
-  const [selectedShipment, setSelectedShipment] = useState(null);
-  const [shipmentSummary, setShipmentSummary] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [allProducts, setAllProducts] = useState([]);
@@ -300,6 +645,21 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
+  const handleCollectPayment = async (orderId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/${orderId}/collect-payment`, {
+        method: 'PUT',
+        headers,
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed'); }
+      setAllOrders(prev => prev.map(o =>
+        o.id === orderId ? { ...o, payment_status: 'succeeded' } : o
+      ));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleAddDeliveryBoy = async (e) => {
     e.preventDefault();
     setDbLoading(true); setDbError(''); setDbSuccess('');
@@ -381,31 +741,6 @@ export default function AdminDashboard({ onLogout }) {
     }
   };
 
-  const fetchShipmentSummary = async (shipmentId) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(
-        `${API_BASE}/api/v1/admin/shipments/${shipmentId}/summary`,
-        { headers }
-      );
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('API Error:', errorData);
-        throw new Error(`Failed to fetch summary: ${response.status}`);
-      }
-      const data = await response.json();
-      console.log('Shipment Summary Data:', data);
-      setShipmentSummary(data);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      setError(err.message);
-      setShipmentSummary(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchAllProducts = async () => {
     try {
       const response = await fetch(`${API_BASE}/api/v1/products`);
@@ -432,11 +767,6 @@ export default function AdminDashboard({ onLogout }) {
     } finally {
       setLoadingVariants(false);
     }
-  };
-
-  const handleViewDetails = (shipment) => {
-    setSelectedShipment(shipment);
-    fetchShipmentSummary(shipment.id);
   };
 
   const handleCreateShipment = async (e) => {
@@ -505,6 +835,9 @@ export default function AdminDashboard({ onLogout }) {
           <h1>🌿 Garden Roots Admin</h1>
           <div className="user-info">
             <span>{user.username}</span>
+            <button onClick={() => setAdminView('store')} className="logout-button" style={{ marginRight: 8 }}>
+              🛍️ Store View
+            </button>
             <button onClick={handleLogout} className="logout-button">Logout</button>
           </div>
         </div>
@@ -557,7 +890,7 @@ export default function AdminDashboard({ onLogout }) {
 
       <div className="admin-content">
         {error && <div className="error-banner">⚠️ {error}</div>}
-        {loading && !shipmentSummary && <div className="loading">⏳ Loading...</div>}
+        {loading && <div className="loading">⏳ Loading...</div>}
 
         {activeTab === 'dashboard' && dashboardData && !loading && (
           <div className="dashboard-section">
@@ -598,16 +931,25 @@ export default function AdminDashboard({ onLogout }) {
               </div>
             </div>
 
+            {dashboardData.yet_to_book_globally > 0 && (
+              <div className="stat-card" style={{ marginTop: '20px', background: '#fef9c3', border: '1px solid #fbbf24' }}>
+                <h3>⚠️ Paid orders not linked to any shipment</h3>
+                <p className="stat-value" style={{ color: '#d97706' }}>{dashboardData.yet_to_book_globally}</p>
+              </div>
+            )}
+
             <h3 style={{ marginTop: '30px' }}>📋 Shipment Summary</h3>
             <table className="shipment-table">
               <thead>
                 <tr>
                   <th>Reference</th>
-                  <th>Total Boxes</th>
-                  <th>Direct</th>
-                  <th>Collection</th>
-                  <th>Damaged</th>
-                  <th>Revenue</th>
+                  <th>Boxes</th>
+                  <th>Orders</th>
+                  <th>Booked</th>
+                  <th>Pending</th>
+                  <th>In Transit</th>
+                  <th>Delivered</th>
+                  <th>Yet to Book</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -616,10 +958,12 @@ export default function AdminDashboard({ onLogout }) {
                   <tr key={summary.shipment_ref}>
                     <td><strong>{summary.shipment_ref}</strong></td>
                     <td>{summary.total_boxes}</td>
-                    <td>{summary.direct_delivery}</td>
-                    <td>{summary.self_collection}</td>
-                    <td>{summary.damaged}</td>
-                    <td>₹{summary.revenue.toFixed(2)}</td>
+                    <td>{summary.orders_total}</td>
+                    <td style={{ color: '#16a34a', fontWeight: 'bold' }}>{summary.orders_booked}</td>
+                    <td style={{ color: '#d97706' }}>{summary.orders_pending}</td>
+                    <td style={{ color: '#3b82f6' }}>{summary.orders_in_transit}</td>
+                    <td style={{ color: '#10b981', fontWeight: 'bold' }}>{summary.orders_delivered}</td>
+                    <td style={{ color: '#ef4444' }}>{summary.orders_yet_to_book}</td>
                     <td>
                       <span className={`status-badge status-${summary.status}`}>
                         {summary.status}
@@ -633,167 +977,7 @@ export default function AdminDashboard({ onLogout }) {
         )}
 
         {activeTab === 'shipments' && !loading && (
-          <div className="shipments-section">
-            <h2>📦 All Shipments</h2>
-
-            <div className="shipments-list">
-              {shipments.length === 0 ? (
-                <p>No shipments found</p>
-              ) : (
-                shipments.map((shipment) => (
-                  <div key={shipment.id} className="shipment-card">
-                    <div className="shipment-header">
-                      <div>
-                        <h3>{shipment.shipment_ref}</h3>
-                        <p>📦 Total Boxes: {shipment.total_boxes}</p>
-                        {shipment.variety_names && shipment.variety_names.length > 0 && (
-                          <p className="shipment-varieties">🍋 Varieties: {shipment.variety_names.join(', ')}</p>
-                        )}
-                        {shipment.notes && <p className="shipment-notes">📝 {shipment.notes}</p>}
-                      </div>
-                      <span className={`status-badge status-${shipment.status}`}>
-                        {shipment.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleViewDetails(shipment)}
-                      className="view-details-button"
-                    >
-                      👁️ View Details
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {selectedShipment && shipmentSummary && (
-              <div className="modal-overlay" onClick={() => setSelectedShipment(null)}>
-                <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className="close-button"
-                    onClick={() => setSelectedShipment(null)}
-                  >
-                    ✕
-                  </button>
-
-                  <h2>📦 {shipmentSummary.shipment_ref} - Details</h2>
-
-                    <div className="summary-stats">
-                    <div className="summary-stat">
-                      <label>Total Boxes:</label>
-                      <span>{shipmentSummary.total_boxes || 0}</span>
-                    </div>
-                    <div className="summary-stat">
-                      <label>Direct Delivery:</label>
-                      <span style={{ color: '#2d5a3d', fontWeight: 'bold' }}>{shipmentSummary.boxes_delivered_direct || 0}</span>
-                    </div>
-                    <div className="summary-stat">
-                      <label>Self Collection:</label>
-                      <span>{shipmentSummary.boxes_collected_self || 0}</span>
-                    </div>
-                    <div className="summary-stat">
-                      <label>Damaged:</label>
-                      <span>{shipmentSummary.boxes_damaged || 0}</span>
-                    </div>
-                    <div className="summary-stat">
-                      <label>Total Revenue:</label>
-                      <span style={{ color: '#10b981', fontWeight: 'bold' }}>₹{(shipmentSummary.total_delivery_revenue || 0).toFixed(2)}</span>
-                    </div>
-                  </div>
-
-                  {shipmentSummary.varieties && shipmentSummary.varieties.length > 0 && (
-                    <div className="varieties-section">
-                      <h3>🍋 Mango Varieties in This Shipment</h3>
-                      <table className="varieties-table">
-                        <thead>
-                          <tr>
-                            <th>Variety</th>
-                            <th>Boxes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {shipmentSummary.varieties.map((v, idx) => (
-                            <tr key={idx}>
-                              <td><strong>{v.variety_name}</strong></td>
-                              <td>{v.box_count}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {shipmentSummary.spoc_contact && (
-                    <div className="spoc-section">
-                      <h3>👤 SPOC Contact</h3>
-                      <div className="contact-details">
-                        <p><strong>Name:</strong> {shipmentSummary.spoc_contact.name}</p>
-                        <p><strong>Phone:</strong> <a href={`tel:${shipmentSummary.spoc_contact.phone}`}>{shipmentSummary.spoc_contact.phone}</a></p>
-                        <p><strong>Email:</strong> <a href={`mailto:${shipmentSummary.spoc_contact.email}`}>{shipmentSummary.spoc_contact.email}</a></p>
-                        <p><strong>Location:</strong> {shipmentSummary.spoc_contact.location}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  <h3>📍 Delivery Summary by Location</h3>
-                  {shipmentSummary.summary_by_location && shipmentSummary.summary_by_location.length > 0 ? (
-                    <table className="location-table">
-                      <thead>
-                        <tr>
-                          <th>Location</th>
-                          <th>Boxes</th>
-                          <th>Direct</th>
-                          <th>Collection</th>
-                          <th>Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {shipmentSummary.summary_by_location.map((loc, idx) => (
-                          <tr key={idx}>
-                            <td><strong>{loc.location}</strong></td>
-                            <td>{loc.boxes_count}</td>
-                            <td style={{ color: '#2d5a3d', fontWeight: 'bold' }}>{loc.direct_delivery_count}</td>
-                            <td>{loc.self_collection_count}</td>
-                            <td>₹{(loc.total_revenue || 0).toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <p className="no-data">No location data available</p>
-                  )}
-
-                  <h3>📦 Delivery Details ({shipmentSummary.delivery_locations?.length || 0} entries)</h3>
-                  {shipmentSummary.delivery_locations && shipmentSummary.delivery_locations.length > 0 ? (
-                    <div className="delivery-details-list">
-                      {shipmentSummary.delivery_locations.slice(0, 20).map((delivery, idx) => (
-                        <div key={idx} className="delivery-item">
-                          <div className="delivery-info">
-                            <strong>{delivery.box_number}</strong>
-                            <span className={`delivery-type ${delivery.delivery_type === 'Direct Delivery' ? 'direct' : 'collection'}`}>
-                              {delivery.delivery_type}
-                            </span>
-                          </div>
-                          <p><strong>📍 Location:</strong> {delivery.location}</p>
-                          <p><strong>👤 Receiver:</strong> {delivery.receiver}</p>
-                          <p><strong>📱 Phone:</strong> {delivery.phone}</p>
-                          {delivery.delivery_date && <p><strong>📅 Date:</strong> {new Date(delivery.delivery_date).toLocaleDateString()}</p>}
-                          <p><strong>💰 Charge:</strong> <span style={{ color: '#10b981', fontWeight: 'bold' }}>₹{delivery.charge.toFixed(2)}</span></p>
-                        </div>
-                      ))}
-                      {shipmentSummary.delivery_locations.length > 20 && (
-                        <p style={{ textAlign: 'center', marginTop: '20px', color: '#666' }}>
-                          ... and {shipmentSummary.delivery_locations.length - 20} more deliveries
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="no-data">No deliveries logged yet</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <ShipmentsView shipments={shipments} headers={headers} API_BASE={API_BASE} />
         )}
 
         {activeTab === 'locations' && !loading && (
@@ -1181,6 +1365,7 @@ export default function AdminDashboard({ onLogout }) {
                   <option value="card">Card</option>
                   <option value="paynow">PayNow</option>
                   <option value="cash">Cash</option>
+                  <option value="pay_later">💰 Pay Later</option>
                 </select>
 
                 <div className="orders-date-range">
@@ -1278,7 +1463,7 @@ export default function AdminDashboard({ onLogout }) {
                       return (
                         <React.Fragment key={o.id}>
                           <tr
-                            style={{ cursor: 'pointer', background: isSelected ? '#f0fdf4' : undefined }}
+                            style={{ cursor: 'pointer', background: isSelected ? '#f0fdf4' : (o.payment_method === 'pay_later' && o.payment_status !== 'succeeded' ? '#fffbeb' : undefined) }}
                           >
                             <td onClick={e => e.stopPropagation()}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleOrderRowSelect(o.id)} />
@@ -1389,6 +1574,18 @@ export default function AdminDashboard({ onLogout }) {
                                       <div className="order-detail-label" style={{ marginTop: 12 }}>Payment</div>
                                       <p><strong>Status:</strong> {o.payment_status}</p>
                                       <p><strong>Method:</strong> {o.payment_method || '—'}</p>
+                                      {o.payment_method === 'pay_later' && o.payment_status !== 'succeeded' && (
+                                        <button
+                                          className="submit-button"
+                                          style={{ marginTop: 8, padding: '6px 14px', fontSize: 13, background: '#d97706' }}
+                                          onClick={() => handleCollectPayment(o.id)}
+                                        >
+                                          💰 Mark Payment Received
+                                        </button>
+                                      )}
+                                      {o.payment_method === 'pay_later' && o.payment_status === 'succeeded' && (
+                                        <p style={{ color: '#16a34a', fontWeight: 600, marginTop: 6 }}>✅ Payment Collected</p>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
