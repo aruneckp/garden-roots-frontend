@@ -747,7 +747,8 @@ body {
 
 /* GLOBAL RESPONSIVE */
 @media (max-width: 768px) {
-  .hero-inner { grid-template-columns: 1fr; text-align: center; }
+  .hero { min-height: unset; }
+  .hero-inner { grid-template-columns: 1fr; text-align: center; padding-bottom: 24px; }
   .hero-visual { display: none; }
   .why-grid { grid-template-columns: 1fr; }
   .footer-inner { grid-template-columns: 1fr; }

@@ -1493,7 +1493,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 {o.payment_status}
                               </span>
                             </td>
-                            <td style={{ fontSize: 12 }}>{o.payment_method || '—'}</td>
+                            <td style={{ fontSize: 12 }}>
+                              <div>{o.payment_method || '—'}</div>
+                              {o.payment_method === 'pay_later' && o.booked_by_admin_name && (
+                                <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                                  by {o.booked_by_admin_name}
+                                </div>
+                              )}
+                            </td>
                             <td style={{ fontSize: 12 }}>
                               {o.delivery_boy_name
                                 ? <span className="assigned-badge">{o.delivery_boy_name}</span>
@@ -1571,6 +1578,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                       <p>{o.customer_name}</p>
                                       <p>{o.customer_email || '—'}</p>
                                       <p>{o.customer_phone || '—'}</p>
+                                      {o.booked_by_admin_name && (
+                                        <p style={{ marginTop: 6, fontSize: 12, color: '#b45309' }}>
+                                          Booked by admin: <strong>{o.booked_by_admin_name}</strong>
+                                        </p>
+                                      )}
                                       <div className="order-detail-label" style={{ marginTop: 12 }}>Payment</div>
                                       <p><strong>Status:</strong> {o.payment_status}</p>
                                       <p><strong>Method:</strong> {o.payment_method || '—'}</p>

@@ -9,7 +9,7 @@ export default function Checkout() {
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
-    user, setShowAuthModal,
+    user, userToken, setShowAuthModal,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -95,6 +95,7 @@ export default function Checkout() {
         pickupLocationId:  deliveryType === 'pickup'   ? selectedPickupId : null,
         customerNotes:     customerNotes.trim() || null,
         userId:            user?.id || null,
+        token:             userToken || null,
       });
       return resp?.data ?? resp;
     } catch (err) {

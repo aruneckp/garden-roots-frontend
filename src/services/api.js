@@ -96,7 +96,7 @@ export const orderApi = {
       pickup_location_id:  orderData.pickupLocationId || null,
       customer_notes:      orderData.customerNotes || null,
       ...(orderData.userId ? { user_id: orderData.userId } : {}),
-    }),
+    }, authHeader(orderData.token)),
 
   getOrder:       (orderId) => get(`/api/v1/orders/${orderId}`),
   getOrderStatus: (orderId) => get(`/api/v1/orders/${orderId}/status`),
