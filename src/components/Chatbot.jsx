@@ -1,6 +1,14 @@
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { QUICK_REPLIES } from '../data/botReplies';
+
+const FAB_TIPS = [
+  { emoji: '⚡', text: 'Order in 30 seconds!' },
+  { emoji: '🥭', text: 'Skip browsing — just ask me!' },
+  { emoji: '🛒', text: 'Add to cart by chatting!' },
+  { emoji: '💬', text: 'Hi! Tap me to get started!' },
+];
 
 export default function Chatbot() {
   const {
@@ -17,6 +25,15 @@ export default function Chatbot() {
   } = useApp();
 
   const varieties = products.length > 0 ? products : fallbackVarieties;
+
+  const [tipIndex, setTipIndex] = useState(0);
+  const [tipVisible, setTipVisible] = useState(true);
+
+  useEffect(() => {
+    if (chatOpen) return;
+    const id = setInterval(() => setTipIndex(i => (i + 1) % FAB_TIPS.length), 4000);
+    return () => clearInterval(id);
+  }, [chatOpen]);
 
   return (
     <>
@@ -148,15 +165,21 @@ export default function Chatbot() {
         </div>
       )}
 
+      {/* Tip bubble */}
+      {!chatOpen && tipVisible && (
+        <div className="chat-tip-bubble" key={tipIndex}>
+          <button className="chat-tip-close" onClick={() => setTipVisible(false)}>✕</button>
+          <span className="chat-tip-emoji">{FAB_TIPS[tipIndex].emoji}</span>
+          {FAB_TIPS[tipIndex].text}
+        </div>
+      )}
+
       {/* Chat FAB — primary, above WhatsApp */}
       <button className="chat-fab" onClick={() => { setChatOpen(o => !o); setChatNotif(false); }}>
         {chatOpen ? (
-          <span style={{ fontSize: 22, color: '#fff' }}>✕</span>
+          <span style={{ fontSize: 22, color: '#fff', fontWeight: 700 }}>✕</span>
         ) : (
-          <div className="chat-fab-icon">
-            <span className="chat-fab-mango">🤖</span>
-            <span className="chat-fab-person">🥭</span>
-          </div>
+          <img src="/mango_chatbot.jpg" alt="Chat with Rooty" className="chat-fab-img" />
         )}
         {chatNotif && !chatOpen && <span className="chat-notif" />}
       </button>

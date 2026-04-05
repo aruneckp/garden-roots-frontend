@@ -118,6 +118,16 @@ export const paymentApi = {
       customer_phone:  customerPhone || null,
     }),
 
+  createPaymentLink: (amount, orderId, customerName, customerEmail, customerPhone, allowAnyAmount = false) =>
+    post('/api/v1/payments/create-payment-link', {
+      amount,
+      order_id:        orderId,
+      customer_name:   customerName  || null,
+      customer_email:  customerEmail || null,
+      customer_phone:  customerPhone || null,
+      allow_any_amount: allowAnyAmount,
+    }),
+
   getPaymentStatus: (paymentIntentId) =>
     get(`/api/v1/payments/status/${paymentIntentId}`),
 
