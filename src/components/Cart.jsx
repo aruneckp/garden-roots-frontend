@@ -2,7 +2,7 @@ import { useApp } from '../context/AppContext';
 import { stockApi } from '../services/api';
 
 export default function Cart() {
-  const { cart, cartTotal, cartCount, delivery, updateQty, removeFromCart, setPage, setPayState, setToast } = useApp();
+  const { cart, cartTotal, cartCount, updateQty, removeFromCart, setPage, setPayState, setToast } = useApp();
 
   const handleCheckout = async () => {
     try {
@@ -77,18 +77,9 @@ export default function Cart() {
               <span>Subtotal</span>
               <span>${cartTotal}</span>
             </div>
-            <div className="summary-row">
-              <span>Delivery</span>
-              <span>{delivery === 0 ? 'Free 🎉' : `$${delivery}`}</span>
-            </div>
-            {delivery > 0 && (
-              <div className="summary-delivery-note">
-                Add ${120 - cartTotal} more for free delivery!
-              </div>
-            )}
             <div className="summary-row total">
               <span>Total</span>
-              <span>${cartTotal + delivery}</span>
+              <span>${cartTotal}</span>
             </div>
             <button className="btn-checkout" onClick={handleCheckout}>
               Proceed to Payment →

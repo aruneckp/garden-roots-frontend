@@ -448,7 +448,7 @@ body {
 .wa-fab {
   position: fixed;
   bottom: 28px;
-  right: 28px;
+  left: 28px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -698,7 +698,7 @@ body {
   60%  { box-shadow: 0 0 0 14px rgba(22,101,52,0), 0 6px 24px rgba(22,101,52,0.45); }
   100% { box-shadow: 0 0 0 0 rgba(22,101,52,0), 0 6px 24px rgba(22,101,52,0.45); }
 }
-.chat-fab { position: fixed; bottom: 88px; right: 28px; width: 68px; height: 68px; border-radius: 50%; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 24px rgba(22,101,52,0.45); z-index: 1000; transition: transform 0.2s; animation: fabPulse 2s ease-out infinite; padding: 0; overflow: hidden; }
+.chat-fab { position: fixed; bottom: 28px; right: 28px; width: 68px; height: 68px; border-radius: 50%; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 24px rgba(22,101,52,0.45); z-index: 1000; transition: transform 0.2s; animation: fabPulse 2s ease-out infinite; padding: 0; overflow: hidden; }
 .chat-fab:hover { transform: scale(1.1); animation: none; box-shadow: 0 8px 28px rgba(22,101,52,0.55); }
 .chat-fab .chat-notif { position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; background: var(--mango); border-radius: 50%; border: 2px solid #fff; }
 .chat-fab-img { width: 68px; height: 68px; border-radius: 50%; object-fit: cover; display: block; }
@@ -706,8 +706,8 @@ body {
 .chat-fab-mango { font-size: 30px; line-height: 1; }
 .chat-fab-person { position: absolute; bottom: -3px; right: -6px; font-size: 14px; line-height: 1; }
 @keyframes tipSlideIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
-.chat-tip-bubble { position: fixed; bottom: 102px; right: 106px; background: #fff; color: var(--text); font-size: 13.5px; font-weight: 600; padding: 10px 14px 10px 12px; border-radius: 14px 14px 4px 14px; box-shadow: 0 4px 18px rgba(0,0,0,0.14); z-index: 1000; display: flex; align-items: center; gap: 7px; white-space: nowrap; animation: tipSlideIn 0.3s ease; }
-.chat-tip-bubble::after { content: ''; position: absolute; bottom: 0; right: -8px; border: 8px solid transparent; border-left-color: #fff; border-bottom-color: #fff; border-right: none; border-top: none; }
+.chat-tip-bubble { position: fixed; bottom: 42px; right: 108px; background: #fff; color: var(--text); font-size: 13.5px; font-weight: 600; padding: 10px 14px 10px 12px; border-radius: 14px; box-shadow: 0 4px 18px rgba(0,0,0,0.14); z-index: 1000; display: flex; align-items: center; gap: 7px; white-space: nowrap; animation: tipSlideIn 0.3s ease; }
+.chat-tip-bubble::after { content: ''; position: absolute; top: 50%; right: -8px; transform: translateY(-50%); border: 8px solid transparent; border-left-color: #fff; border-right: none; }
 .chat-tip-emoji { font-size: 16px; }
 .chat-tip-close { background: none; border: none; cursor: pointer; font-size: 10px; color: #aaa; padding: 0 2px 0 0; line-height: 1; margin-left: -2px; }
 .chat-window { position: fixed; bottom: 164px; right: 28px; width: 360px; max-height: 520px; background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); display: flex; flex-direction: column; z-index: 1000; overflow: hidden; animation: chatSlideUp 0.25s ease; }

@@ -94,6 +94,7 @@ export const orderApi = {
       delivery_type:       orderData.deliveryType || 'delivery',
       delivery_address:    orderData.deliveryAddress || null,
       pickup_location_id:  orderData.pickupLocationId || null,
+      postal_code:         orderData.postalCode || null,
       customer_notes:      orderData.customerNotes || null,
       ...(orderData.userId ? { user_id: orderData.userId } : {}),
     }, authHeader(orderData.token)),
@@ -133,6 +134,14 @@ export const paymentApi = {
 
   confirmPayment: (orderId, paymentIntentId) =>
     put(`/api/v1/payments/${orderId}/payment-confirm?payment_intent_id=${paymentIntentId}`),
+};
+
+// ---------------------------------------------------------------------------
+// Delivery Fee API
+// ---------------------------------------------------------------------------
+
+export const deliveryFeeApi = {
+  getFee: (postalCode) => get(`/api/v1/delivery/fee?postal_code=${encodeURIComponent(postalCode)}`),
 };
 
 // ---------------------------------------------------------------------------

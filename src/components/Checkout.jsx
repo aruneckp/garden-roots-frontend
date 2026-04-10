@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { orderApi, paymentApi, locationApi } from '../services/api';
+import SimpleDeliveryFee from './SimpleDeliveryFee';
 
 export default function Checkout() {
   const {
-    cart, cartTotal, delivery,
+    cart, cartTotal,
     payState, setPayState,
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
@@ -16,7 +17,6 @@ export default function Checkout() {
     name:  user?.name  || '',
     email: user?.email || '',
     phone: user?.phone || '',
-    address: '',
   });
 
   // Keep form in sync if user logs in after opening checkout
@@ -52,8 +52,37 @@ export default function Checkout() {
   // Payment method — admins can choose Pay Later for phone orders
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paynow');
 
+  // Dynamic delivery fee — updated by SimpleDeliveryFee via onDeliveryFeeChange
+  const [dynamicDeliveryFee, setDynamicDeliveryFee] = useState(10);
+
+  // Structured delivery address fields
+  const [deliveryPostalCode, setDeliveryPostalCode] = useState('');
+  const [deliveryArea,       setDeliveryArea]       = useState('');
+  const [deliveryStreet,     setDeliveryStreet]     = useState('');
+  const [deliveryUnitNo,     setDeliveryUnitNo]     = useState('');
+  // True once the delivery fee API has resolved (used as gate for checkout validation)
+  const [deliveryFeeLoaded,  setDeliveryFeeLoaded]  = useState(false);
+
+  // When switching to pickup, clear all delivery fields
+  useEffect(() => {
+    if (deliveryType === 'pickup') {
+      setDynamicDeliveryFee(0);
+      setDeliveryPostalCode('');
+      setDeliveryArea('');
+      setDeliveryStreet('');
+      setDeliveryUnitNo('');
+      setDeliveryFeeLoaded(false);
+    }
+  }, [deliveryType]);
+
+  // Constructed delivery address from structured fields
+  const deliveryAddress = (deliveryStreet || deliveryArea)
+    ? [deliveryUnitNo.trim(), deliveryStreet || deliveryArea, `Singapore ${deliveryPostalCode}`]
+        .filter(Boolean).join(', ')
+    : '';
+
   // Effective delivery fee shown in UI
-  const displayDelivery = deliveryType === 'pickup' ? 0 : delivery;
+  const displayDelivery = deliveryType === 'pickup' ? 0 : dynamicDeliveryFee;
   const displayTotal    = cartTotal + displayDelivery;
 
 
@@ -64,15 +93,25 @@ export default function Checkout() {
 
   const handleCreateOrder = async () => {
     try {
-      const { name, email, phone, address } = customerForm;
+      const { name, email, phone } = customerForm;
 
       if (!name.trim() || !email.trim() || !phone.trim()) {
         showToast('Please fill in your name, email and phone number');
         return null;
       }
-      if (deliveryType === 'delivery' && !address.trim()) {
-        showToast('Please enter your delivery address');
-        return null;
+      if (deliveryType === 'delivery') {
+        if (deliveryPostalCode.length !== 6) {
+          showToast('Please enter a valid 6-digit postal code');
+          return null;
+        }
+        if (!deliveryFeeLoaded) {
+          showToast('Delivery fee not loaded yet — please wait a moment');
+          return null;
+        }
+        if (!deliveryUnitNo.trim()) {
+          showToast('Please enter your block or unit number');
+          return null;
+        }
       }
       if (deliveryType === 'pickup' && !selectedPickupId) {
         showToast('Please select a pickup location');
@@ -91,8 +130,9 @@ export default function Checkout() {
         customerPhone:     phone,
         paymentMethod:     selectedPaymentMethod,
         deliveryType,
-        deliveryAddress:   deliveryType === 'delivery' ? address : null,
+        deliveryAddress:   deliveryType === 'delivery' ? deliveryAddress : null,
         pickupLocationId:  deliveryType === 'pickup'   ? selectedPickupId : null,
+        postalCode:        deliveryType === 'delivery' ? deliveryPostalCode : null,
         customerNotes:     customerNotes.trim() || null,
         userId:            user?.id || null,
         token:             userToken || null,
@@ -286,11 +326,23 @@ export default function Checkout() {
           ))}
           <hr className="checkout-divider" />
           <div className="checkout-total-row"><span>Subtotal</span><span>${cartTotal}</span></div>
-          <div className="checkout-total-row">
-            <span>Delivery</span>
-            <span>{displayDelivery === 0 ? (deliveryType === 'pickup' ? 'Free (Self-Pickup) 🏪' : 'Free 🎉') : `$${displayDelivery}`}</span>
+          {/* Delivery row — only show once delivery type is known and fee is resolved */}
+          {(deliveryType === 'pickup' || deliveryFeeLoaded) && (
+            <div className="checkout-total-row">
+              <span>Delivery</span>
+              <span>
+                {deliveryType === 'pickup'
+                  ? 'Free (Self-Pickup) 🏪'
+                  : displayDelivery === 0
+                    ? 'Free 🎉'
+                    : `$${displayDelivery}`}
+              </span>
+            </div>
+          )}
+          <div className="checkout-total-row grand">
+            <span>Total</span>
+            <span>${deliveryType === 'pickup' || deliveryFeeLoaded ? displayTotal : cartTotal} SGD</span>
           </div>
-          <div className="checkout-total-row grand"><span>Total</span><span>${displayTotal} SGD</span></div>
         </div>
 
         {/* Payment */}
@@ -367,16 +419,66 @@ export default function Checkout() {
                   />
                 </div>
 
-                {/* Delivery address — only shown for home delivery */}
+                {/* Delivery address — postal code → area auto-detected → unit no */}
                 {deliveryType === 'delivery' && (
-                  <div className="card-field">
-                    <label>Delivery Address *</label>
-                    <input
-                      placeholder="123 Main Street, #04-01, Singapore 123456"
-                      value={customerForm.address}
-                      onChange={e => setCustomerForm(f => ({ ...f, address: e.target.value }))}
-                    />
-                  </div>
+                  <>
+                    {/* 1. Postal Code */}
+                    <div className="card-field">
+                      <label>Postal Code *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="e.g. 521234"
+                        value={deliveryPostalCode}
+                        onChange={e => {
+                          setDeliveryPostalCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                          setDeliveryFeeLoaded(false);
+                          setDeliveryArea('');
+                          setDeliveryStreet('');
+                        }}
+                        style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}
+                      />
+                      {deliveryPostalCode.length > 0 && deliveryPostalCode.length < 6 && (
+                        <span style={{ fontSize: 11, color: '#9CA3AF', display: 'block', marginTop: 4 }}>
+                          Enter all 6 digits
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 2. Auto-detected address + fee (shown once 6 digits entered) */}
+                    {deliveryPostalCode.length === 6 && (
+                      <div className="card-field">
+                        <SimpleDeliveryFee
+                          postalCode={deliveryPostalCode}
+                          onDeliveryFeeChange={(fee) => { setDynamicDeliveryFee(fee); setDeliveryFeeLoaded(true); }}
+                          onAreaChange={setDeliveryArea}
+                          onStreetChange={setDeliveryStreet}
+                        />
+                      </div>
+                    )}
+
+                    {/* 3. Auto-populated street address (editable in case user needs to correct) */}
+                    {deliveryStreet && (
+                      <div className="card-field">
+                        <label>Street Address <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(auto-filled)</span></label>
+                        <input
+                          value={deliveryStreet}
+                          onChange={e => setDeliveryStreet(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {/* 4. Unit / Block Number */}
+                    <div className="card-field">
+                      <label>Block / Unit Number *</label>
+                      <input
+                        placeholder="#05-123  or  Blk 521"
+                        value={deliveryUnitNo}
+                        onChange={e => setDeliveryUnitNo(e.target.value)}
+                      />
+                    </div>
+                  </>
                 )}
 
                 {/* Pickup location selector — only shown for self-pickup */}

@@ -4,10 +4,7 @@ import { varieties as fallbackVarieties } from '../data/varieties';
 import { QUICK_REPLIES } from '../data/botReplies';
 
 const FAB_TIPS = [
-  { emoji: '⚡', text: 'Order in 30 seconds!' },
-  { emoji: '🥭', text: 'Skip browsing — just ask me!' },
-  { emoji: '🛒', text: 'Add to cart by chatting!' },
-  { emoji: '💬', text: 'Hi! Tap me to get started!' },
+  { emoji: '⚡', text: 'Order in 30 seconds!' }
 ];
 
 export default function Chatbot() {
