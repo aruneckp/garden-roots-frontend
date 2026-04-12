@@ -62,6 +62,8 @@ export function AppProvider({ children }) {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [siteConfig, setSiteConfig] = useState({ banner_messages: null });
+
 
   // Chat state
   const [chatOpen, setChatOpen] = useState(false);
@@ -205,6 +207,7 @@ export function AppProvider({ children }) {
             original_price: staticData.original_price || null,
             weight_approx: staticData.weight_approx || null,
             local_names: staticData.local_names || [],
+            is_active: product.is_active ?? 1,
           };
         });
         setProducts(transformedProducts);
@@ -217,6 +220,20 @@ export function AppProvider({ children }) {
     };
 
     loadProducts();
+  }, []);
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const { API_BASE } = await import('../services/api');
+        const res = await fetch(`${API_BASE}/api/v1/config`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) setSiteConfig(json.data);
+        }
+      } catch (_) {}
+    };
+    loadConfig();
   }, []);
 
   // Derived cart values
@@ -329,6 +346,8 @@ export function AppProvider({ children }) {
       loginUser, logoutUser, updateUserPhone,
       // Admin view mode
       adminView, setAdminView, adminInitialTab, setAdminInitialTab,
+      // Site config
+      siteConfig, setSiteConfig,
     }}>
       {children}
     </AppContext.Provider>

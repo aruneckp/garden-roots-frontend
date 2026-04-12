@@ -462,6 +462,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
 
+  // Products tab state
+  const [adminProducts, setAdminProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [togglingProductId, setTogglingProductId] = useState(null);
+
+  // Config tab state
+  const [bannerMessages, setBannerMessages] = useState('');
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configSuccess, setConfigSuccess] = useState(false);
+
+
   const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
   const user = JSON.parse(localStorage.getItem('admin_user') || '{}');
 
@@ -506,6 +517,66 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       if (shipments.length === 0) fetchShipments();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'products') {
+      fetchAdminProducts();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'config') {
+      fetch(`${API_BASE}/api/v1/config`)
+        .then(r => r.json())
+        .then(json => setBannerMessages(json.data?.banner_messages || ''))
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+
+  const fetchAdminProducts = async () => {
+    setProductsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminProducts(data.data || []);
+      }
+    } catch (_) {}
+    setProductsLoading(false);
+  };
+
+  const handleSaveBannerMessages = async () => {
+    setConfigSaving(true);
+    setConfigSuccess(false);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/config/banner_messages`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ config_value: bannerMessages }),
+      });
+      if (res.ok) setConfigSuccess(true);
+    } catch (_) {}
+    setConfigSaving(false);
+    setTimeout(() => setConfigSuccess(false), 3000);
+  };
+
+  const handleToggleProductActive = async (productId) => {
+    setTogglingProductId(productId);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/${productId}/active`, {
+        method: 'PATCH',
+        headers,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminProducts(prev =>
+          prev.map(p => p.id === productId ? { ...p, is_active: data.data.is_active } : p)
+        );
+      }
+    } catch (_) {}
+    setTogglingProductId(null);
+  };
 
   const fetchDeliveryBoys = async () => {
     try {
@@ -934,6 +1005,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           onClick={() => setActiveTab('orders')}
         >
           📋 Orders
+        </button>
+        <button
+          className={`nav-tab ${activeTab === 'products' ? 'active' : ''}`}
+          onClick={() => setActiveTab('products')}
+        >
+          🥭 Products
+        </button>
+        <button
+          className={`nav-tab ${activeTab === 'config' ? 'active' : ''}`}
+          onClick={() => setActiveTab('config')}
+        >
+          ⚙️ Config
         </button>
       </div>
 
@@ -1820,6 +1903,105 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'products' && (
+          <div className="dashboard-section">
+            <h2>🥭 Products</h2>
+            {productsLoading ? (
+              <p>⏳ Loading products...</p>
+            ) : adminProducts.length === 0 ? (
+              <p style={{ color: '#6b7280' }}>No products found.</p>
+            ) : (
+              <table className="shipment-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Tag</th>
+                    <th>Origin</th>
+                    <th>Season</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adminProducts.map((product, idx) => (
+                    <tr key={product.id}>
+                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{idx + 1}</td>
+                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}><strong>{product.name}</strong></td>
+                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.tag || '—'}</td>
+                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.origin || '—'}</td>
+                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.season_start && product.season_end ? `${product.season_start} – ${product.season_end}` : '—'}</td>
+                      <td>
+                        <button
+                          onClick={() => handleToggleProductActive(product.id)}
+                          style={{
+                            padding: '5px 16px',
+                            borderRadius: 6,
+                            border: 'none',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            letterSpacing: '0.05em',
+                            cursor: 'pointer',
+                            background: product.is_active ? '#dc2626' : '#16a34a',
+                            color: '#fff',
+                            transition: 'background 0.2s',
+                            opacity: 1,
+                          }}
+                        >
+                          {togglingProductId === product.id
+                            ? '...'
+                            : product.is_active ? 'DISABLE' : 'ENABLE'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+
+        {activeTab === 'config' && (
+          <div className="dashboard-section">
+            <h2>⚙️ Site Configuration</h2>
+            <div style={{ maxWidth: 620 }}>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                📢 Banner Messages (top bar)
+              </label>
+              <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>
+                One message per line. Multiple messages rotate every 2 seconds on the website.
+              </p>
+              <textarea
+                value={bannerMessages.split('|').join('\n')}
+                onChange={e => setBannerMessages(e.target.value.split('\n').join('|'))}
+                rows={5}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 6,
+                  border: '1px solid #d1d5db', fontSize: 14, resize: 'vertical',
+                  fontFamily: 'inherit', boxSizing: 'border-box', lineHeight: 1.6,
+                }}
+                placeholder={`🥭 Fresh Indian Mangoes Air-Flown to Singapore — Free delivery over $120\n🚚 Order before 2pm for same-day dispatch`}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+                <button
+                  className="submit-button"
+                  style={{ padding: '8px 20px' }}
+                  disabled={configSaving}
+                  onClick={handleSaveBannerMessages}
+                >
+                  {configSaving ? 'Saving…' : 'Save'}
+                </button>
+                {configSuccess && (
+                  <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 13 }}>✅ Saved successfully</span>
+                )}
+              </div>
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                Tip: each line becomes one message in the rotation.
+              </p>
+            </div>
           </div>
         )}
 

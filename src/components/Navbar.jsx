@@ -1,12 +1,32 @@
 import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
+const FALLBACK_MESSAGES = ['🥭 Fresh Indian Mangoes Air-Flown to Singapore — Free delivery over $120'];
+
 export default function Navbar() {
-  const { setPage, cartCount, user, logoutUser, setShowAuthModal, setAdminView, setAdminInitialTab } = useApp();
+  const { setPage, cartCount, user, logoutUser, setShowAuthModal, setAdminView, setAdminInitialTab, siteConfig } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef(null);
   const navRef = useRef(null);
+  const [bannerIndex, setBannerIndex] = useState(0);
+  const [bannerVisible, setBannerVisible] = useState(true);
+
+  const bannerMessages = siteConfig?.banner_messages
+    ? siteConfig.banner_messages.split('|').map(m => m.trim()).filter(Boolean)
+    : FALLBACK_MESSAGES;
+
+  useEffect(() => {
+    if (bannerMessages.length <= 1) return;
+    const timer = setInterval(() => {
+      setBannerVisible(false);
+      setTimeout(() => {
+        setBannerIndex(i => (i + 1) % bannerMessages.length);
+        setBannerVisible(true);
+      }, 500);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [bannerMessages.length]);
 
   const navLinks = ['Home', 'Varieties', 'Pickup Locations', 'About Us', 'Contact Us'];
 
@@ -32,7 +52,18 @@ export default function Navbar() {
 
   return (
     <>
-      <div className="topbar">🥭 Fresh Indian Mangoes Air-Flown to Singapore — Free delivery over $120</div>
+      <div className="topbar" style={{ overflow: 'hidden' }}>
+        <span style={{
+          display: 'inline-block',
+          transition: bannerVisible
+            ? 'opacity 0.7s ease, transform 0.7s ease'
+            : 'opacity 0.2s ease, transform 0.2s ease',
+          opacity: bannerVisible ? 1 : 0,
+          transform: bannerVisible ? 'translateY(0)' : 'translateY(8px)',
+        }}>
+          {bannerMessages[bannerIndex]}
+        </span>
+      </div>
 
       <nav className="nav" ref={navRef}>
         <div className="nav-inner">

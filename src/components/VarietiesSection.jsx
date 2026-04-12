@@ -32,6 +32,7 @@ export default function VarietiesSection() {
         <div className="varieties-grid">
           {varietiesToShow.map(v => {
             const qty = cart.find(c => c.id === v.id)?.qty || 0;
+            const disabled = v.is_active === 0;
             return (
               <div className="variety-card" key={v.id}>
 
@@ -71,29 +72,36 @@ export default function VarietiesSection() {
 
                 {/* ── Footer: +/- controls + basket ── */}
                 <div className="vc-footer">
-                  <div className="vc-qty-controls">
-                    <button
-                      className="vc-qty-btn add"
-                      onClick={e => { e.stopPropagation(); addToCart(v); }}
-                    >+</button>
-                    <button
-                      className="vc-qty-btn sub"
-                      onClick={e => { e.stopPropagation(); updateQty(v.id, -1); }}
-                      disabled={qty === 0}
-                    >−</button>
-                  </div>
-
-                  <div
-                    className="vc-basket-wrap"
-                    onClick={e => { e.stopPropagation(); addToCart(v); }}
-                    title={qty === 0 ? 'Add to basket' : `${qty} in basket`}
-                  >
-                    <RiShoppingBasketLine
-                      className={`vc-basket-icon${qty === 0 ? ' empty' : ''}`}
-                      aria-hidden="true"
-                    />
-                    {qty > 0 && <span className="vc-basket-badge">{qty}</span>}
-                  </div>
+                  {disabled ? (
+                    <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 13, letterSpacing: '0.03em' }}>
+                      Out of Stock
+                    </span>
+                  ) : (
+                    <>
+                      <div className="vc-qty-controls">
+                        <button
+                          className="vc-qty-btn add"
+                          onClick={e => { e.stopPropagation(); addToCart(v); }}
+                        >+</button>
+                        <button
+                          className="vc-qty-btn sub"
+                          onClick={e => { e.stopPropagation(); updateQty(v.id, -1); }}
+                          disabled={qty === 0}
+                        >−</button>
+                      </div>
+                      <div
+                        className="vc-basket-wrap"
+                        onClick={e => { e.stopPropagation(); addToCart(v); }}
+                        title={qty === 0 ? 'Add to basket' : `${qty} in basket`}
+                      >
+                        <RiShoppingBasketLine
+                          className={`vc-basket-icon${qty === 0 ? ' empty' : ''}`}
+                          aria-hidden="true"
+                        />
+                        {qty > 0 && <span className="vc-basket-badge">{qty}</span>}
+                      </div>
+                    </>
+                  )}
                 </div>
 
               </div>
