@@ -48,7 +48,8 @@ export default function Navbar() {
           </button>
 
           <div className="logo" onClick={() => { setPage('home'); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-            {'🌿 Garden'}<span>{'Roots'}</span>
+            {'🌿 Garden'}
+            <span>Roots</span>
           </div>
 
           {/* Desktop nav links */}

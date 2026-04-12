@@ -1,10 +1,23 @@
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function Hero() {
   const { setPage } = useApp();
 
+  const [heroFading, setHeroFading] = useState(false);
+  const [heroHidden, setHeroHidden] = useState(false);
+
+  useEffect(() => {
+    if (window.innerWidth > 768) return;
+    const fadeTimer = setTimeout(() => setHeroFading(true), 5000);
+    const hideTimer = setTimeout(() => setHeroHidden(true), 5600);
+    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
+  }, []);
+
+  if (heroHidden) return null;
+
   return (
-    <section className="hero">
+    <section className={`hero${heroFading ? ' hero-fade-out' : ''}`}>
       <div className="hero-inner">
         <div>
           <div className="hero-badge">

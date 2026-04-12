@@ -192,12 +192,16 @@ export default function Checkout() {
   // ── Full-page order confirmation (replaces checkout layout after payment) ──
   if (payState === 'success') {
     return (
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '60px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 72, marginBottom: 16 }}>🎉</div>
-        <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(26px,4vw,36px)', color: 'var(--dark)', marginBottom: 8 }}>
+      <div className="confirm-page">
+        {/* GardenRoots brand icon — all screens */}
+        <div className="confirm-brand-icon">
+          <span className="confirm-gr-icon">🌿</span>
+          <span className="confirm-gr-text">Garden<strong>Roots</strong></span>
+        </div>
+        <h1 className="confirm-title">
           Order Confirmed!
         </h1>
-        <p style={{ color: '#78716C', fontSize: 15, marginBottom: 32 }}>
+        <p className="confirm-sub">
           {deliveryType === 'pickup'
             ? 'Your order is confirmed. We\'ll get it ready for pickup soon!'
             : 'Your order is confirmed and will be on its way shortly!'}
@@ -222,7 +226,9 @@ export default function Checkout() {
           {cart.map(item => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>{item.emoji}</span>
+                {item.image
+                  ? <img src={item.image} alt={item.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--mango-light)' }} />
+                  : <span style={{ fontSize: 22 }}>{item.emoji}</span>}
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--dark)' }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: '#78716C' }}>Qty: {item.qty}</div>
@@ -237,13 +243,41 @@ export default function Checkout() {
           </div>
         </div>
 
+        {/* Pickup address — shown only for self-collection */}
+        {deliveryType === 'pickup' && selectedPickup && (
+          <div style={{ background: '#F0FDF4', border: '2px solid #86EFAC', borderRadius: 12, padding: '16px 20px', marginBottom: 24, textAlign: 'left' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--green)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              📍 Self-Collection Address
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)', marginBottom: 4 }}>{selectedPickup.name}</div>
+            <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, marginBottom: 6 }}>
+              {selectedPickup.address}
+            </div>
+            {selectedPickup.hours && (
+              <div style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 500 }}>
+                🕐 {selectedPickup.hours}
+              </div>
+            )}
+            {selectedPickup.whatsapp_phone && (
+              <a
+                href={`https://wa.me/${selectedPickup.whatsapp_phone.replace(/\D/g, '')}?text=Hi! I'd like to arrange pickup for order ${orderRef}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 600, color: '#16A34A', textDecoration: 'none' }}
+              >
+                💬 WhatsApp to Confirm Pickup Slot
+              </a>
+            )}
+          </div>
+        )}
+
         {/* What happens next */}
         <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '16px 20px', marginBottom: 32, textAlign: 'left', fontSize: 14, color: '#78350F', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>What happens next?</div>
           {selectedPaymentMethod === 'pay_later'
             ? 'Order confirmed. Payment to be collected from the customer. Go to Admin → Orders to mark payment as received once collected.'
             : deliveryType === 'pickup'
-              ? 'We\'ll prepare your order and notify you when it\'s ready for collection at your selected pickup location.'
+              ? 'We\'ll prepare your order and notify you when it\'s ready for collection. WhatsApp us to confirm your pickup slot.'
               : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
         </div>
 
@@ -315,7 +349,9 @@ export default function Checkout() {
           {cart.map(item => (
             <div className="checkout-order-item" key={item.id}>
               <div className="checkout-order-item-left">
-                <span className="checkout-item-emoji">{item.emoji}</span>
+                {item.image
+                  ? <img src={item.image} alt={item.name} className="checkout-item-img" />
+                  : <span className="checkout-item-emoji">{item.emoji}</span>}
                 <div>
                   <div className="checkout-item-name">{item.name}</div>
                   <div className="checkout-item-qty">Qty: {item.qty}</div>
@@ -486,16 +522,18 @@ export default function Checkout() {
                   <>
                     <div className="card-field">
                       <label>Pickup Location *</label>
-                      <select
-                        value={selectedPickupId || ''}
-                        onChange={e => setSelectedPickupId(e.target.value ? Number(e.target.value) : null)}
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, background: '#fff' }}
-                      >
-                        <option value="">— Select a location —</option>
+                      <div className="pickup-location-btns">
                         {pickupLocations.map(loc => (
-                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                          <button
+                            key={loc.id}
+                            type="button"
+                            className={`pickup-location-btn${selectedPickupId === loc.id ? ' active' : ''}`}
+                            onClick={() => setSelectedPickupId(loc.id)}
+                          >
+                            📍 {loc.name}
+                          </button>
                         ))}
-                      </select>
+                      </div>
                     </div>
 
                     {/* Show selected location details + WhatsApp */}
@@ -563,13 +601,6 @@ export default function Checkout() {
                 <div className="paynow-box">
                   <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
                   <div className="paynow-amount">${displayTotal} SGD <span>to pay</span></div>
-                  <div className="paynow-steps">
-                    <strong>How to pay with PayNow</strong>
-                    1. Click below to generate your secure QR code<br />
-                    2. Open your banking app and scan<br />
-                    3. Confirm the amount: <strong>${displayTotal} SGD</strong><br />
-                    4. Click "I've Completed Payment" after transferring
-                  </div>
                   <button className="btn-checkout" onClick={handlePayment}>
                     Pay with PayNow via HitPay →
                   </button>
@@ -583,12 +614,6 @@ export default function Checkout() {
                   <div className="paynow-box" style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
                     <div className="paynow-amount">${displayTotal} SGD <span>to collect</span></div>
-                    <div className="paynow-steps" style={{ background: '#fef3c7', borderColor: '#fcd34d' }}>
-                      <strong>Pay Later — Phone/Walk-in Order</strong>
-                      Order will be confirmed immediately.<br />
-                      Payment of <strong>${displayTotal} SGD</strong> to be collected from customer.<br />
-                      Track and update payment in Admin → Orders.
-                    </div>
                     <button className="btn-checkout" style={{ background: '#d97706' }} onClick={handlePayLater}>
                       Confirm Order — Collect Payment Later →
                     </button>

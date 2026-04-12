@@ -398,6 +398,7 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
 export default function AdminDashboard({ onLogout, defaultTab }) {
   const { setAdminView } = useApp();
   const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
+  const [shipmentSubTab, setShipmentSubTab] = useState('list');
   const [dashboardData, setDashboardData] = useState(null);
   const [shipments, setShipments] = useState([]);
 
@@ -417,6 +418,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     delivery_type: '', payment_status: '', order_status: '',
     pickup_location_id: '', delivery_boy_id: '', assigned: '',
     payment_method: '', date_from: '', date_to: '',
+  });
+  const [activeFilters, setActiveFilters] = useState({
+    delivery_type: false,
+    payment_status: false,
+    order_status: false,
+    pickup_location_id: false,
+    payment_method: false,
   });
   const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [orderSelectedIds, setOrderSelectedIds] = useState([]);
@@ -475,10 +483,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'create') {
+    if (activeTab === 'shipments' && shipmentSubTab === 'create') {
       fetchAllProducts();
     }
-  }, [activeTab]);
+  }, [activeTab, shipmentSubTab]);
 
   useEffect(() => {
     if (activeTab === 'delivery') {
@@ -814,6 +822,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchAllProducts();
       alert('Shipment created successfully!');
       fetchShipments();
+      setShipmentSubTab('list');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -827,6 +836,52 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     localStorage.removeItem('admin_user');
     onLogout();
   };
+
+  const filterGroups = [
+    {
+      key: 'delivery_type',
+      label: 'Delivery Mode',
+      options: [
+        { value: 'delivery', label: '🚚 Home Delivery' },
+        { value: 'pickup',   label: '🏪 Self Pickup' },
+      ],
+    },
+    {
+      key: 'payment_status',
+      label: 'Payment Status',
+      options: [
+        { value: 'pending',   label: 'Pending' },
+        { value: 'succeeded', label: 'Succeeded' },
+        { value: 'failed',    label: 'Failed' },
+      ],
+    },
+    {
+      key: 'order_status',
+      label: 'Order Status',
+      options: [
+        { value: 'pending',   label: 'Pending' },
+        { value: 'confirmed', label: 'Confirmed' },
+        { value: 'shipped',   label: 'Shipped' },
+        { value: 'delivered', label: 'Delivered' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    {
+      key: 'pickup_location_id',
+      label: 'Locations',
+      options: adminPickupLocations.map(loc => ({ value: String(loc.id), label: loc.name })),
+    },
+    {
+      key: 'payment_method',
+      label: 'Payment Methods',
+      options: [
+        { value: 'card',      label: '💳 Card' },
+        { value: 'paynow',    label: 'PayNow' },
+        { value: 'cash',      label: '💵 Cash' },
+        { value: 'pay_later', label: '💰 Pay Later' },
+      ],
+    },
+  ];
 
   return (
     <div className="admin-dashboard">
@@ -867,12 +922,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           onClick={() => setActiveTab('payments')}
         >
           💰 Payments
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'create' ? 'active' : ''}`}
-          onClick={() => setActiveTab('create')}
-        >
-          ➕ Create
         </button>
         <button
           className={`nav-tab ${activeTab === 'delivery' ? 'active' : ''}`}
@@ -977,7 +1026,146 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         )}
 
         {activeTab === 'shipments' && !loading && (
-          <ShipmentsView shipments={shipments} headers={headers} API_BASE={API_BASE} />
+          <div className="shipments-section">
+            <div className="shipment-sub-nav">
+              <button
+                className={`sub-tab ${shipmentSubTab === 'list' ? 'active' : ''}`}
+                onClick={() => setShipmentSubTab('list')}
+              >
+                📦 All Shipments
+              </button>
+              <button
+                className={`sub-tab ${shipmentSubTab === 'create' ? 'active' : ''}`}
+                onClick={() => setShipmentSubTab('create')}
+              >
+                ➕ Create Shipment
+              </button>
+            </div>
+
+            {shipmentSubTab === 'list' && (
+              <ShipmentsView shipments={shipments} headers={headers} API_BASE={API_BASE} />
+            )}
+
+            {shipmentSubTab === 'create' && (
+              <div className="create-section">
+                <h2>➕ Create New Shipment</h2>
+
+                <form onSubmit={handleCreateShipment} className="create-form">
+                  {(() => {
+                    const total = Object.values(varietyBoxCounts).reduce(
+                      (sum, c) => sum + (parseInt(c) || 0), 0
+                    );
+                    return (
+                      <div className="form-group">
+                        <label>Mango Varieties — enter number of boxes for each variety *</label>
+                        {allProducts.length === 0 ? (
+                          <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading varieties...</p>
+                        ) : (
+                          <table className="variety-entry-table">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Variety</th>
+                                <th>No. of Boxes</th>
+                                <th>Box Weight (kg)</th>
+                                <th>Price per Kg (₹)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {allProducts.map((product, idx) => (
+                                <tr key={product.id} className={varietyBoxCounts[product.id] > 0 ? 'variety-row-selected' : ''}>
+                                  <td className="variety-idx">{idx + 1}</td>
+                                  <td className="variety-name-cell">{product.name}</td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      placeholder="0"
+                                      value={varietyBoxCounts[product.id] || ''}
+                                      onChange={(e) => setVarietyBoxCounts(prev => ({
+                                        ...prev,
+                                        [product.id]: e.target.value,
+                                      }))}
+                                      className="variety-box-input"
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.1"
+                                      placeholder="—"
+                                      value={varietyBoxWeights[product.id] || ''}
+                                      onChange={(e) => setVarietyBoxWeights(prev => ({
+                                        ...prev,
+                                        [product.id]: e.target.value,
+                                      }))}
+                                      className="variety-box-input"
+                                      disabled={!varietyBoxCounts[product.id]}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      placeholder="—"
+                                      value={varietyPricesPerKg[product.id] || ''}
+                                      onChange={(e) => setVarietyPricesPerKg(prev => ({
+                                        ...prev,
+                                        [product.id]: e.target.value,
+                                      }))}
+                                      className="variety-box-input"
+                                      disabled={!varietyBoxCounts[product.id]}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="variety-total-row">
+                                <td colSpan="2"><strong>Total Boxes</strong></td>
+                                <td>
+                                  {total > 0
+                                    ? <span className="total-boxes-value">{total}</span>
+                                    : <span style={{ color: '#9ca3af' }}>0</span>}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <div className="form-group">
+                    <label htmlFor="expected_value">Expected Value (₹)</label>
+                    <input
+                      id="expected_value"
+                      name="expected_value"
+                      type="number"
+                      step="0.01"
+                      placeholder="Enter expected value (optional)"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="notes">Notes</label>
+                    <textarea
+                      id="notes"
+                      name="notes"
+                      placeholder="Enter any notes about this shipment (optional)"
+                      rows="4"
+                    ></textarea>
+                  </div>
+
+                  <button type="submit" className="submit-button">
+                    ✅ Create Shipment
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'locations' && !loading && (
@@ -1311,42 +1499,67 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
         {activeTab === 'orders' && (
           <div className="orders-section">
-            <h2>📋 All Orders</h2>
+            {(() => {
+              const now = Date.now();
+              const last1h  = allOrders.filter(o => o.created_at && (now - new Date(o.created_at).getTime()) <= 60 * 60 * 1000).length;
+              const last23h = allOrders.filter(o => o.created_at && (now - new Date(o.created_at).getTime()) <= 24 * 60 * 60 * 1000).length;
+              return (
+                <div className="orders-heading-row">
+                  <h2>📋 All Orders</h2>
+                  <span className="orders-stat-badge orders-stat-total">{allOrders.length} Total</span>
+                  <span className="orders-stat-badge orders-stat-new">{allOrders.filter(o => o.order_status === 'pending').length} New</span>
+                  <span className="orders-stat-badge orders-stat-1h">⚡ {last1h} in last 1h</span>
+                  <span className="orders-stat-badge orders-stat-23h">🕐 {last23h} in last 24h</span>
+                </div>
+              );
+            })()}
 
             {/* ── Filter panel ── */}
             <div className="orders-filter-panel">
-              <div className="orders-filter-row">
-                <select value={orderFilters.delivery_type} onChange={e => handleOrderFilterChange('delivery_type', e.target.value)} className="orders-filter-select">
-                  <option value="">All Modes</option>
-                  <option value="delivery">Home Delivery</option>
-                  <option value="pickup">Self Pickup</option>
-                </select>
-
-                <select value={orderFilters.payment_status} onChange={e => handleOrderFilterChange('payment_status', e.target.value)} className="orders-filter-select">
-                  <option value="">All Payment</option>
-                  <option value="pending">Pending</option>
-                  <option value="succeeded">Succeeded</option>
-                  <option value="failed">Failed</option>
-                </select>
-
-                <select value={orderFilters.order_status} onChange={e => handleOrderFilterChange('order_status', e.target.value)} className="orders-filter-select">
-                  <option value="">All Order Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="shipped">Shipped</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-
-                <select value={orderFilters.pickup_location_id} onChange={e => handleOrderFilterChange('pickup_location_id', e.target.value)} className="orders-filter-select">
-                  <option value="">All Locations</option>
-                  {adminPickupLocations.map(loc => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </select>
+              {/* Row 1: horizontal toggle buttons */}
+              <div className="filter-checkbox-row">
+                <span className="filter-type-label">Filter Type:</span>
+                {filterGroups.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    className={`filter-toggle-btn${activeFilters[key] ? ' active' : ''}`}
+                    onClick={() => {
+                      const enabled = !activeFilters[key];
+                      setActiveFilters(prev => ({ ...prev, [key]: enabled }));
+                      if (!enabled) handleOrderFilterChange(key, '');
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              <div className="orders-filter-row">
+              {/* Rows below: one per enabled filter — label on left, chips on right */}
+              {filterGroups.filter(({ key }) => activeFilters[key]).map(({ key, label, options }) => (
+                <div key={key} className="filter-active-row">
+                  <span className="filter-active-label">{label}:</span>
+                  <div className="filter-chips">
+                    {options.map(opt => {
+                      const count = allOrders.filter(o => String(o[key]) === opt.value).length;
+                      const isActive = orderFilters[key] === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          className={`filter-chip${isActive ? ' active' : ''}`}
+                          onClick={() => handleOrderFilterChange(key, isActive ? '' : opt.value)}
+                        >
+                          {opt.label}
+                          {isActive && <span className="chip-close"> ✕</span>}
+                          <span className={`chip-count${isActive ? ' active' : ''}`}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Secondary row: delivery boy, assigned, date range, clear */}
+              <div className="orders-filter-row" style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10, marginTop: 4 }}>
                 <select value={orderFilters.delivery_boy_id} onChange={e => handleOrderFilterChange('delivery_boy_id', e.target.value)} className="orders-filter-select">
                   <option value="">All Delivery Boys</option>
                   {deliveryBoys.map(b => (
@@ -1358,14 +1571,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <option value="">Assigned — All</option>
                   <option value="yes">Assigned</option>
                   <option value="no">Unassigned</option>
-                </select>
-
-                <select value={orderFilters.payment_method} onChange={e => handleOrderFilterChange('payment_method', e.target.value)} className="orders-filter-select">
-                  <option value="">All Pay Methods</option>
-                  <option value="card">Card</option>
-                  <option value="paynow">PayNow</option>
-                  <option value="cash">Cash</option>
-                  <option value="pay_later">💰 Pay Later</option>
                 </select>
 
                 <div className="orders-date-range">
@@ -1383,6 +1588,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       payment_method: '', date_from: '', date_to: '',
                     };
                     setOrderFilters(cleared);
+                    setActiveFilters({ delivery_type: false, payment_status: false, order_status: false, pickup_location_id: false, payment_method: false });
                     setOrderSelectedIds([]);
                     fetchAllOrders(cleared);
                   }}
@@ -1617,125 +1823,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
-        {activeTab === 'create' && !loading && (
-          <div className="create-section">
-            <h2>➕ Create New Shipment</h2>
-
-            <form onSubmit={handleCreateShipment} className="create-form">
-              {(() => {
-                const total = Object.values(varietyBoxCounts).reduce(
-                  (sum, c) => sum + (parseInt(c) || 0), 0
-                );
-                return (
-                  <div className="form-group">
-                    <label>Mango Varieties — enter number of boxes for each variety *</label>
-                    {allProducts.length === 0 ? (
-                      <p style={{ color: '#6b7280', fontSize: '14px' }}>Loading varieties...</p>
-                    ) : (
-                      <table className="variety-entry-table">
-                        <thead>
-                          <tr>
-                            <th>#</th>
-                            <th>Variety</th>
-                            <th>No. of Boxes</th>
-                            <th>Box Weight (kg)</th>
-                            <th>Price per Kg (₹)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {allProducts.map((product, idx) => (
-                            <tr key={product.id} className={varietyBoxCounts[product.id] > 0 ? 'variety-row-selected' : ''}>
-                              <td className="variety-idx">{idx + 1}</td>
-                              <td className="variety-name-cell">{product.name}</td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  placeholder="0"
-                                  value={varietyBoxCounts[product.id] || ''}
-                                  onChange={(e) => setVarietyBoxCounts(prev => ({
-                                    ...prev,
-                                    [product.id]: e.target.value,
-                                  }))}
-                                  className="variety-box-input"
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  placeholder="—"
-                                  value={varietyBoxWeights[product.id] || ''}
-                                  onChange={(e) => setVarietyBoxWeights(prev => ({
-                                    ...prev,
-                                    [product.id]: e.target.value,
-                                  }))}
-                                  className="variety-box-input"
-                                  disabled={!varietyBoxCounts[product.id]}
-                                />
-                              </td>
-                              <td>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="—"
-                                  value={varietyPricesPerKg[product.id] || ''}
-                                  onChange={(e) => setVarietyPricesPerKg(prev => ({
-                                    ...prev,
-                                    [product.id]: e.target.value,
-                                  }))}
-                                  className="variety-box-input"
-                                  disabled={!varietyBoxCounts[product.id]}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot>
-                          <tr className="variety-total-row">
-                            <td colSpan="2"><strong>Total Boxes</strong></td>
-                            <td>
-                              {total > 0
-                                ? <span className="total-boxes-value">{total}</span>
-                                : <span style={{ color: '#9ca3af' }}>0</span>}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    )}
-                  </div>
-                );
-              })()}
-
-              <div className="form-group">
-                <label htmlFor="expected_value">Expected Value (₹)</label>
-                <input
-                  id="expected_value"
-                  name="expected_value"
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter expected value (optional)"
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="notes">Notes</label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  placeholder="Enter any notes about this shipment (optional)"
-                  rows="4"
-                ></textarea>
-              </div>
-
-              <button type="submit" className="submit-button">
-                ✅ Create Shipment
-              </button>
-            </form>
-          </div>
-        )}
       </div>
     </div>
   );

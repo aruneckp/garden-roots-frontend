@@ -202,6 +202,9 @@ export function AppProvider({ children }) {
             emoji: staticData.emoji || '🥭',
             image: staticData.image,
             imgHeight: staticData.imgHeight || 130,
+            original_price: staticData.original_price || null,
+            weight_approx: staticData.weight_approx || null,
+            local_names: staticData.local_names || [],
           };
         });
         setProducts(transformedProducts);
@@ -228,7 +231,7 @@ export function AppProvider({ children }) {
       if (existing) return c.map(i => i.id === v.id ? { ...i, qty: i.qty + 1 } : i);
       return [...c, { ...v, qty: 1 }];
     });
-    setToast(`${v.name} added to cart! 🛒`);
+    setToast(`${v.name} added to cart!`);
     setTimeout(() => setToast(null), 2500);
   };
 
