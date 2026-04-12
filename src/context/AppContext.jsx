@@ -183,12 +183,12 @@ export function AppProvider({ children }) {
         // Backend wraps all responses: { success, data, message }
         const rawProducts = resp?.data ?? resp;
         const transformedProducts = rawProducts.map(product => {
-          // Variants have a flat `price` field (current active price from Oracle pricing table)
+          // Variants have a flat `price` field (current active price from DB pricing table)
           const firstVariant = product.variants?.[0];
           // Parse price cleanly: "32.0" → "$32", "38.5" → "$38.5"
           const rawPrice = firstVariant?.price != null ? parseFloat(firstVariant.price) : 0;
           const price = `$${Number.isInteger(rawPrice) ? rawPrice : rawPrice}`;
-          // Match static data by name to preserve emoji/image assets
+          // Match static data by name to preserve emoji/image/local-name assets (non-price UI data only)
           const staticData = fallbackVarieties.find(v => v.name.toLowerCase() === product.name.toLowerCase()) || {};
           return {
             id: product.id,
@@ -204,7 +204,7 @@ export function AppProvider({ children }) {
             emoji: staticData.emoji || '🥭',
             image: staticData.image,
             imgHeight: staticData.imgHeight || 130,
-            original_price: staticData.original_price || null,
+            original_price: null,
             weight_approx: staticData.weight_approx || null,
             local_names: staticData.local_names || [],
             is_active: product.is_active ?? 1,
