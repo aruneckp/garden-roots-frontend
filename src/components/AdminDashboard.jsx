@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
+import PromoManager from './PromoManager';
 import { API_BASE } from '../services/api';
 import { useApp } from '../context/AppContext';
 
@@ -1013,6 +1014,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           🥭 Products
         </button>
         <button
+          className={`nav-tab ${activeTab === 'promos' ? 'active' : ''}`}
+          onClick={() => setActiveTab('promos')}
+        >
+          🎟️ Promos
+        </button>
+        <button
           className={`nav-tab ${activeTab === 'config' ? 'active' : ''}`}
           onClick={() => setActiveTab('config')}
         >
@@ -2002,6 +2009,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 Tip: each line becomes one message in the rotation.
               </p>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'promos' && (
+          <div className="dashboard-section">
+            <PromoManager headers={headers} />
           </div>
         )}
 

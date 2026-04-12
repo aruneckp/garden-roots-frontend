@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { orderApi, paymentApi, locationApi } from '../services/api';
+import { orderApi, paymentApi, locationApi, promoApi } from '../services/api';
 import SimpleDeliveryFee from './SimpleDeliveryFee';
 
 export default function Checkout() {
@@ -63,6 +63,17 @@ export default function Checkout() {
   // True once the delivery fee API has resolved (used as gate for checkout validation)
   const [deliveryFeeLoaded,  setDeliveryFeeLoaded]  = useState(false);
 
+  const handleDeliveryFeeChange = useCallback((fee) => {
+    setDynamicDeliveryFee(fee);
+    setDeliveryFeeLoaded(true);
+  }, []);
+
+  // Promo code
+  const [promoInput,    setPromoInput]    = useState('');
+  const [promoApplied,  setPromoApplied]  = useState(null);  // { promo_code_id, code, discount_amount, message }
+  const [promoLoading,  setPromoLoading]  = useState(false);
+  const [promoError,    setPromoError]    = useState(null);
+
   // When switching to pickup, clear all delivery fields
   useEffect(() => {
     if (deliveryType === 'pickup') {
@@ -82,13 +93,41 @@ export default function Checkout() {
     : '';
 
   // Effective delivery fee shown in UI
-  const displayDelivery = deliveryType === 'pickup' ? 0 : dynamicDeliveryFee;
-  const displayTotal    = cartTotal + displayDelivery;
-
+  const displayDelivery  = deliveryType === 'pickup' ? 0 : dynamicDeliveryFee;
+  const discountAmount   = promoApplied ? Number(promoApplied.discount_amount) : 0;
+  const displayTotal     = cartTotal - discountAmount + displayDelivery;
 
   const showToast = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const applyPromo = async () => {
+    if (!promoInput.trim()) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const res = await promoApi.validate({
+        code:               promoInput.trim(),
+        order_subtotal:     cartTotal,
+        user_id:            user?.id || null,
+        delivery_type:      deliveryType,
+        pickup_location_id: deliveryType === 'pickup' ? selectedPickupId : null,
+      }, user?.role === 'admin' ? userToken : null);
+      const data = res?.data ?? res;
+      setPromoApplied(data);
+    } catch (err) {
+      setPromoError(err.message || 'Invalid promo code');
+      setPromoApplied(null);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  const removePromo = () => {
+    setPromoApplied(null);
+    setPromoInput('');
+    setPromoError(null);
   };
 
   const handleCreateOrder = async () => {
@@ -134,6 +173,7 @@ export default function Checkout() {
         pickupLocationId:  deliveryType === 'pickup'   ? selectedPickupId : null,
         postalCode:        deliveryType === 'delivery' ? deliveryPostalCode : null,
         customerNotes:     customerNotes.trim() || null,
+        promoCode:         promoApplied?.code || null,
         userId:            user?.id || null,
         token:             userToken || null,
       });
@@ -237,9 +277,15 @@ export default function Checkout() {
               <div style={{ fontWeight: 600, color: 'var(--dark)' }}>${parseFloat(item.price.replace('$', '')) * item.qty}</div>
             </div>
           ))}
+          {promoApplied && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 14, color: '#16A34A', fontWeight: 600 }}>
+              <span>🎉 Promo ({promoApplied.code}) saved you</span>
+              <span>−${Number(promoApplied.discount_amount).toFixed(2)}</span>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>
             <span>{selectedPaymentMethod === 'pay_later' ? 'Amount to Collect' : 'Total Paid'}</span>
-            <span style={{ color: selectedPaymentMethod === 'pay_later' ? '#d97706' : 'var(--green)' }}>${confirmedTotal ?? displayTotal} SGD</span>
+            <span style={{ color: selectedPaymentMethod === 'pay_later' ? '#d97706' : 'var(--green)' }}>${confirmedTotal ?? displayTotal.toFixed(2)} SGD</span>
           </div>
         </div>
 
@@ -362,6 +408,13 @@ export default function Checkout() {
           ))}
           <hr className="checkout-divider" />
           <div className="checkout-total-row"><span>Subtotal</span><span>${cartTotal}</span></div>
+          {/* Promo discount row */}
+          {promoApplied && (
+            <div className="checkout-total-row" style={{ color: '#16A34A' }}>
+              <span>Promo ({promoApplied.code})</span>
+              <span>−${Number(promoApplied.discount_amount).toFixed(2)}</span>
+            </div>
+          )}
           {/* Delivery row — only show once delivery type is known and fee is resolved */}
           {(deliveryType === 'pickup' || deliveryFeeLoaded) && (
             <div className="checkout-total-row">
@@ -377,7 +430,7 @@ export default function Checkout() {
           )}
           <div className="checkout-total-row grand">
             <span>Total</span>
-            <span>${deliveryType === 'pickup' || deliveryFeeLoaded ? displayTotal : cartTotal} SGD</span>
+            <span>${deliveryType === 'pickup' || deliveryFeeLoaded ? displayTotal.toFixed(2) : cartTotal} SGD</span>
           </div>
         </div>
 
@@ -487,7 +540,7 @@ export default function Checkout() {
                       <div className="card-field">
                         <SimpleDeliveryFee
                           postalCode={deliveryPostalCode}
-                          onDeliveryFeeChange={(fee) => { setDynamicDeliveryFee(fee); setDeliveryFeeLoaded(true); }}
+                          onDeliveryFeeChange={handleDeliveryFeeChange}
                           onAreaChange={setDeliveryArea}
                           onStreetChange={setDeliveryStreet}
                         />
@@ -555,6 +608,42 @@ export default function Checkout() {
                     )}
                   </>
                 )}
+
+                {/* Promo code */}
+                <div className="card-field">
+                  <label>Promo Code <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(optional)</span></label>
+                  {promoApplied ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, background: '#F0FDF4', border: '1px solid #86EFAC' }}>
+                      <span style={{ fontSize: 16 }}>🎉</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, color: '#16A34A', fontSize: 14 }}>{promoApplied.code}</div>
+                        <div style={{ fontSize: 12, color: '#6B7280' }}>{promoApplied.message}</div>
+                      </div>
+                      <button onClick={removePromo} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: 18, lineHeight: 1 }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        placeholder="Enter promo code"
+                        value={promoInput}
+                        onChange={e => { setPromoInput(e.target.value.toUpperCase()); setPromoError(null); }}
+                        onKeyDown={e => e.key === 'Enter' && applyPromo()}
+                        style={{ flex: 1, fontFamily: 'monospace', letterSpacing: '0.05em', textTransform: 'uppercase' }}
+                        disabled={promoLoading}
+                      />
+                      <button
+                        onClick={applyPromo}
+                        disabled={promoLoading || !promoInput.trim()}
+                        style={{ padding: '10px 16px', borderRadius: 8, background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        {promoLoading ? '…' : 'Apply'}
+                      </button>
+                    </div>
+                  )}
+                  {promoError && (
+                    <span style={{ fontSize: 12, color: '#DC2626', display: 'block', marginTop: 5 }}>{promoError}</span>
+                  )}
+                </div>
 
                 {/* Notes / feedback — always optional */}
                 <div className="card-field">

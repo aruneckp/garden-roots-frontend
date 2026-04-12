@@ -96,11 +96,25 @@ export const orderApi = {
       pickup_location_id:  orderData.pickupLocationId || null,
       postal_code:         orderData.postalCode || null,
       customer_notes:      orderData.customerNotes || null,
+      promo_code:          orderData.promoCode || null,
       ...(orderData.userId ? { user_id: orderData.userId } : {}),
     }, authHeader(orderData.token)),
 
   getOrder:       (orderId) => get(`/api/v1/orders/${orderId}`),
   getOrderStatus: (orderId) => get(`/api/v1/orders/${orderId}/status`),
+};
+
+// ---------------------------------------------------------------------------
+// Promo Code API
+// ---------------------------------------------------------------------------
+
+export const promoApi = {
+  validate: (payload, token) => post('/api/v1/promos/validate', payload, token ? authHeader(token) : {}),
+
+  // Admin
+  listPromos:   (token)           => get('/api/v1/promos/admin', authHeader(token)),
+  createPromo:  (token, payload)  => post('/api/v1/promos/admin', payload, authHeader(token)),
+  updatePromo:  (token, id, payload) => put(`/api/v1/promos/admin/${id}`, payload, authHeader(token)),
 };
 
 // ---------------------------------------------------------------------------
@@ -168,6 +182,7 @@ export const authApi = {
 // ---------------------------------------------------------------------------
 
 export const userApi = {
+  listUsers:      (token)                   => get('/api/v1/admin/users', authHeader(token)),
   getMe:          (token)                   => get('/api/v1/users/me', authHeader(token)),
   updatePhone:    (token, phone)            => put('/api/v1/users/me/phone', { phone }, authHeader(token)),
   getMyOrders:    (token)                   => get('/api/v1/users/me/orders', authHeader(token)),
