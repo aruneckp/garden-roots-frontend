@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { RiDeleteBin6Line } from 'react-icons/ri';
 import { useApp } from '../context/AppContext';
-import { varieties as fallbackVarieties } from '../data/varieties';
 import { QUICK_REPLIES } from '../data/botReplies';
 
 const FAB_TIPS = [
@@ -22,7 +21,7 @@ export default function Chatbot({ hideFab = false }) {
     addToCart, removeFromCart,
   } = useApp();
 
-  const varieties = products.length > 0 ? products : fallbackVarieties;
+  const varieties = products;
 
   const [tipIndex, setTipIndex] = useState(0);
   const [tipVisible, setTipVisible] = useState(true);

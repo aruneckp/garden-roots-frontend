@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { RiShoppingBasketLine } from 'react-icons/ri';
 import { useApp } from '../context/AppContext';
-import { varieties as fallbackVarieties } from '../data/varieties';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -13,12 +12,11 @@ function shuffle(arr) {
 }
 
 export default function VarietiesSection() {
-  const { addToCart, updateQty, cart, products } = useApp();
-  const varietiesToShow = products.length > 0 ? products : fallbackVarieties;
+  const { addToCart, updateQty, cart, products, loadingProducts } = useApp();
 
   // Shuffle local_names once per mount — stable across re-renders
   const shuffledNames = useMemo(
-    () => Object.fromEntries(varietiesToShow.map(v => [v.id, shuffle(v.local_names || [])])),
+    () => Object.fromEntries(products.map(v => [v.id, shuffle(v.local_names || [])])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
@@ -29,8 +27,14 @@ export default function VarietiesSection() {
         <div className="section-label">Our Collection</div>
         <h2 className="section-title">Mango Varieties</h2>
         <p className="section-sub">Each variety tells a story of its origin — a distinct personality, sweetness, and aroma.</p>
+        {loadingProducts && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>Loading varieties…</div>
+        )}
+        {!loadingProducts && products.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#dc2626' }}>Unable to load products. Please try again later.</div>
+        )}
         <div className="varieties-grid">
-          {varietiesToShow.map(v => {
+          {products.map(v => {
             const qty = cart.find(c => c.id === v.id)?.qty || 0;
             const disabled = v.is_active === 0;
             return (

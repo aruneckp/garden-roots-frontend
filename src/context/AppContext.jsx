@@ -213,7 +213,7 @@ export function AppProvider({ children }) {
         setProducts(transformedProducts);
       } catch (err) {
         console.error('Failed to load products from API, using fallback:', err);
-        setProducts(fallbackVarieties);
+        setProducts([]);
       } finally {
         setLoadingProducts(false);
       }
@@ -279,8 +279,7 @@ export function AppProvider({ children }) {
     setChatTyping(true);
 
     const lower = msg.toLowerCase();
-    const varietiesToUse = products.length > 0 ? products : fallbackVarieties;
-    const addMatch = varietiesToUse.find(v =>
+    const addMatch = products.find(v =>
       lower.includes(v.name.toLowerCase().split(' ')[0].toLowerCase()) &&
       (lower.includes('add') || lower.includes('order') || lower.includes('want') || lower.includes('buy') || lower.includes('get'))
     );
