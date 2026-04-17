@@ -10,6 +10,7 @@ export default function AuthModal() {
   const [step, setStep] = useState('login'); // 'login' | 'phone'
   const [phone, setPhone] = useState('');
   const [saving, setSaving] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
   const [pendingToken, setPendingToken] = useState(null);
   const [pendingUser, setPendingUser] = useState(null);
 
@@ -41,6 +42,7 @@ export default function AuthModal() {
   }, [showAuthModal, step]);
 
   const handleGoogleCredential = async (response) => {
+    setAuthenticating(true);
     try {
       const result = await authApi.googleLogin(response.credential);
       const data = result?.data ?? result;
@@ -60,6 +62,8 @@ export default function AuthModal() {
     } catch (err) {
       setToast(`Login failed: ${err.message}`);
       setTimeout(() => setToast(null), 3500);
+    } finally {
+      setAuthenticating(false);
     }
   };
 
@@ -95,7 +99,14 @@ export default function AuthModal() {
       <div className="auth-modal" onClick={e => e.stopPropagation()}>
         <button className="auth-modal-close" onClick={() => setShowAuthModal(false)}>✕</button>
 
-        {step === 'login' && (
+        {step === 'login' && authenticating && (
+          <div className="auth-authenticating">
+            <div className="auth-spinner" />
+            <p className="auth-authenticating-text">Authenticating…</p>
+          </div>
+        )}
+
+        {step === 'login' && !authenticating && (
           <>
             <div className="auth-modal-logo">🌿 Garden<span>Roots</span></div>
             <h2 className="auth-modal-title">Sign in to your account</h2>
