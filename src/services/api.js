@@ -156,7 +156,11 @@ export const paymentApi = {
 // ---------------------------------------------------------------------------
 
 export const deliveryFeeApi = {
-  getFee: (postalCode) => get(`/api/v1/delivery/fee?postal_code=${encodeURIComponent(postalCode)}`),
+  getFee: (postalCode, cartTotal) => {
+    const params = new URLSearchParams({ postal_code: postalCode });
+    if (cartTotal != null) params.set('cart_total', cartTotal);
+    return get(`/api/v1/delivery/fee?${params}`);
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -84,8 +84,8 @@ function StoreContent() {
 
       {toast && <div className="toast">{toast}</div>}
 
-      {/* Fixed centered chatbot strip — same on every page */}
-      <div className="chatbot-cta-strip">
+      {/* Chatbot CTA strip + chatbot — home page only */}
+      {page === 'home' && <div className="chatbot-cta-strip">
         <div className="chatbot-cta-text-wrap" onClick={() => setChatOpen(true)} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setChatOpen(true)}>
           {CTA_MESSAGES.map((msg, i) => (
             <span
@@ -114,9 +114,9 @@ function StoreContent() {
         <button className="chatbot-cta-btn" onClick={() => setChatOpen(true)}>
           <img src="/mango_chatbot.jpg" alt="Rooty" className="chatbot-cta-img" />
         </button>
-      </div>
+      </div>}
 
-      <Chatbot hideFab={true} />
+      {page === 'home' && <Chatbot hideFab={true} />}
 
       {showAuthModal && <AuthModal />}
     </>

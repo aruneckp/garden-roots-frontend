@@ -10,7 +10,7 @@ export default function Checkout() {
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
-    user, userToken, setShowAuthModal,
+    user, userToken,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -54,6 +54,7 @@ export default function Checkout() {
 
   // Dynamic delivery fee — updated by SimpleDeliveryFee via onDeliveryFeeChange
   const [dynamicDeliveryFee, setDynamicDeliveryFee] = useState(10);
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState(null);
 
   // Structured delivery address fields
   const [deliveryPostalCode, setDeliveryPostalCode] = useState('');
@@ -92,8 +93,9 @@ export default function Checkout() {
         .filter(Boolean).join(', ')
     : '';
 
-  // Effective delivery fee shown in UI
-  const displayDelivery  = deliveryType === 'pickup' ? 0 : dynamicDeliveryFee;
+  // Effective delivery fee shown in UI — zero if pickup or cart meets free-delivery threshold
+  const qualifiesFreeDelivery = freeDeliveryThreshold != null && cartTotal >= freeDeliveryThreshold;
+  const displayDelivery = (deliveryType === 'pickup' || qualifiesFreeDelivery) ? 0 : dynamicDeliveryFee;
   const discountAmount   = promoApplied ? Number(promoApplied.discount_amount) : 0;
   const displayTotal     = cartTotal - discountAmount + displayDelivery;
 
@@ -186,10 +188,6 @@ export default function Checkout() {
   };
 
   const handlePayment = async () => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
     const order = await handleCreateOrder();
     if (!order) return;
 
@@ -421,6 +419,17 @@ export default function Checkout() {
           ))}
           <hr className="checkout-divider" />
           <div className="checkout-total-row"><span>Subtotal</span><span>${cartTotal}</span></div>
+          {/* Free delivery nudge */}
+          {deliveryType === 'delivery' && freeDeliveryThreshold != null && !qualifiesFreeDelivery && (
+            <div style={{ fontSize: 12, color: '#d97706', fontWeight: 600, margin: '2px 0 4px', textAlign: 'right' }}>
+              Add ${(freeDeliveryThreshold - cartTotal).toFixed(2)} more for free delivery 🚚
+            </div>
+          )}
+          {deliveryType === 'delivery' && qualifiesFreeDelivery && (
+            <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, margin: '2px 0 4px', textAlign: 'right' }}>
+              You qualify for free delivery! 🎉
+            </div>
+          )}
           {/* Promo discount row */}
           {promoApplied && (
             <div className="checkout-total-row" style={{ color: '#16A34A' }}>
@@ -428,8 +437,8 @@ export default function Checkout() {
               <span>−${Number(promoApplied.discount_amount).toFixed(2)}</span>
             </div>
           )}
-          {/* Delivery row — only show once delivery type is known and fee is resolved */}
-          {(deliveryType === 'pickup' || deliveryFeeLoaded) && (
+          {/* Delivery row — show once fee resolved, or immediately if already free */}
+          {(deliveryType === 'pickup' || deliveryFeeLoaded || qualifiesFreeDelivery) && (
             <div className="checkout-total-row">
               <span>Delivery</span>
               <span>
@@ -443,7 +452,7 @@ export default function Checkout() {
           )}
           <div className="checkout-total-row grand">
             <span>Total</span>
-            <span>${deliveryType === 'pickup' || deliveryFeeLoaded ? displayTotal.toFixed(2) : cartTotal} SGD</span>
+            <span>${deliveryType === 'pickup' || deliveryFeeLoaded || qualifiesFreeDelivery ? displayTotal.toFixed(2) : cartTotal} SGD</span>
           </div>
         </div>
 
@@ -558,9 +567,12 @@ export default function Checkout() {
                       <div className="card-field">
                         <SimpleDeliveryFee
                           postalCode={deliveryPostalCode}
+                          cartTotal={cartTotal}
                           onDeliveryFeeChange={handleDeliveryFeeChange}
                           onAreaChange={setDeliveryArea}
                           onStreetChange={setDeliveryStreet}
+                          onFreeThresholdChange={setFreeDeliveryThreshold}
+                          isFreeDelivery={qualifiesFreeDelivery}
                         />
                       </div>
                     )}

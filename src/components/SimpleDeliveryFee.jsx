@@ -21,9 +21,12 @@ const DEFAULT_STYLE = ZONE_STYLES['Standard Area'];
  */
 export default function SimpleDeliveryFee({
   postalCode,
+  cartTotal,
   onDeliveryFeeChange,
   onAreaChange,
   onStreetChange,
+  onFreeThresholdChange,
+  isFreeDelivery,
 }) {
   const [result,  setResult]  = useState(null);   // { fee, area, street, zone }
   const [loading, setLoading] = useState(false);
@@ -45,11 +48,12 @@ export default function SimpleDeliveryFee({
       setLoading(true);
       setError(null);
       try {
-        const data = await deliveryFeeApi.getFee(postalCode);
+        const data = await deliveryFeeApi.getFee(postalCode, cartTotal);
         setResult(data);
-        if (onDeliveryFeeChange) onDeliveryFeeChange(data.fee);
-        if (onAreaChange)        onAreaChange(data.area   || '');
-        if (onStreetChange)      onStreetChange(data.street || '');
+        if (onDeliveryFeeChange)    onDeliveryFeeChange(data.fee);
+        if (onAreaChange)           onAreaChange(data.area   || '');
+        if (onStreetChange)         onStreetChange(data.street || '');
+        if (onFreeThresholdChange)  onFreeThresholdChange(data.free_threshold ?? null);
       } catch (err) {
         setError('Could not detect your address. Please try again.');
         setResult(null);
@@ -59,7 +63,7 @@ export default function SimpleDeliveryFee({
         setLoading(false);
       }
     }, 400);
-  }, [postalCode, onDeliveryFeeChange, onAreaChange, onStreetChange]);
+  }, [postalCode, cartTotal, onDeliveryFeeChange, onAreaChange, onStreetChange]);
 
   const zoneStyle = result ? (ZONE_STYLES[result.zone] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
 
@@ -105,8 +109,8 @@ export default function SimpleDeliveryFee({
               </div>
             )}
           </div>
-          <div style={{ fontWeight: 700, fontSize: 17, color: zoneStyle.color, flexShrink: 0 }}>
-            {formatDeliveryFee(result.fee)}
+          <div style={{ fontWeight: 700, fontSize: 17, color: isFreeDelivery ? '#16a34a' : zoneStyle.color, flexShrink: 0 }}>
+            {isFreeDelivery ? 'Free 🎉' : formatDeliveryFee(result.fee)}
           </div>
         </div>
       )}
