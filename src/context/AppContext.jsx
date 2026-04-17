@@ -212,6 +212,14 @@ export function AppProvider({ children }) {
             is_active: product.is_active ?? 1,
           };
         });
+        const order = fallbackVarieties.map(v => v.name.toLowerCase());
+        transformedProducts.sort((a, b) => {
+          const ai = order.indexOf(a.name.toLowerCase());
+          const bi = order.indexOf(b.name.toLowerCase());
+          const ar = ai === -1 ? Infinity : ai;
+          const br = bi === -1 ? Infinity : bi;
+          return ar - br;
+        });
         setProducts(transformedProducts);
       } catch (err) {
         console.error('Failed to load products from API, using fallback:', err);

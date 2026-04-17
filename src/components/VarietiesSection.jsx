@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { RiShoppingBasketLine } from 'react-icons/ri';
 import { useApp } from '../context/AppContext';
 
@@ -14,12 +14,19 @@ function shuffle(arr) {
 export default function VarietiesSection() {
   const { addToCart, updateQty, cart, products, loadingProducts } = useApp();
 
-  // Shuffle local_names once per mount — stable across re-renders
-  const shuffledNames = useMemo(
-    () => Object.fromEntries(products.map(v => [v.id, shuffle(v.local_names || [])])),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+  // Shuffle local_names once per product ID — stable across re-renders but
+  // correctly populated after the async products load completes.
+  const shuffleCache = useRef({});
+  const shuffledNames = useMemo(() => {
+    const result = {};
+    products.forEach(v => {
+      if (!shuffleCache.current[v.id]) {
+        shuffleCache.current[v.id] = shuffle(v.local_names || []);
+      }
+      result[v.id] = shuffleCache.current[v.id];
+    });
+    return result;
+  }, [products]);
 
   return (
     <section className="section" id="varieties">

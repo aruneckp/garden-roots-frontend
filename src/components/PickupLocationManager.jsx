@@ -2,23 +2,27 @@ import { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import { API_BASE } from '../services/api';
 
+const EMPTY_FORM = {
+  name: '',
+  address: '',
+  phone: '',
+  email: '',
+  manager_name: '',
+  location_type: 'retail',
+  capacity: 100,
+  notes: '',
+};
+
 export default function PickupLocationManager() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
-    phone: '',
-    email: '',
-    manager_name: '',
-    location_type: 'retail',
-    capacity: 100,
-    notes: '',
-  });
+  const [formData, setFormData] = useState(EMPTY_FORM);
 
   const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
   const headers = {
@@ -53,33 +57,70 @@ export default function PickupLocationManager() {
     }));
   };
 
+  const openAddForm = () => {
+    setEditingId(null);
+    setFormData(EMPTY_FORM);
+    setShowForm(true);
+    setError('');
+  };
+
+  const openEditForm = (location) => {
+    setEditingId(location.id);
+    setFormData({
+      name: location.name || '',
+      address: location.address || '',
+      phone: location.phone || '',
+      email: location.email || '',
+      manager_name: location.manager_name || '',
+      location_type: location.location_type || 'retail',
+      capacity: location.capacity || 100,
+      notes: location.notes || '',
+    });
+    setShowForm(true);
+    setError('');
+  };
+
+  const cancelForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setFormData(EMPTY_FORM);
+    setError('');
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/api/v1/admin/pickup-locations`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(formData),
-      });
-      if (!response.ok) throw new Error('Failed to create location');
-      setFormData({
-        name: '',
-        address: '',
-        phone: '',
-        email: '',
-        manager_name: '',
-        location_type: 'retail',
-        capacity: 100,
-        notes: '',
-      });
-      setShowForm(false);
+      const url = editingId
+        ? `${API_BASE}/api/v1/admin/pickup-locations/${editingId}`
+        : `${API_BASE}/api/v1/admin/pickup-locations`;
+      const method = editingId ? 'PUT' : 'POST';
+      const response = await fetch(url, { method, headers, body: JSON.stringify(formData) });
+      if (!response.ok) throw new Error(editingId ? 'Failed to update location' : 'Failed to create location');
+      cancelForm();
       await fetchLocations();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (locationId, locationName) => {
+    if (!window.confirm(`Delete "${locationName}"? This cannot be undone.`)) return;
+    setDeletingId(locationId);
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/admin/pickup-locations/${locationId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!response.ok) throw new Error('Failed to delete location');
+      await fetchLocations();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -102,10 +143,7 @@ export default function PickupLocationManager() {
     <div className="location-manager">
       <div className="location-header">
         <h2>📍 Pickup Location Manager</h2>
-        <button
-          className="submit-button"
-          onClick={() => setShowForm(!showForm)}
-        >
+        <button className="submit-button" onClick={showForm ? cancelForm : openAddForm}>
           {showForm ? '✕ Cancel' : '➕ Add Location'}
         </button>
       </div>
@@ -115,16 +153,15 @@ export default function PickupLocationManager() {
 
       {showForm && (
         <form onSubmit={handleSubmit} className="create-form">
+          <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 700 }}>
+            {editingId ? '✏️ Edit Location' : '➕ New Location'}
+          </h3>
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="name">Location Name *</label>
               <input
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="e.g., Mumbai Central Showroom"
-                required
+                id="name" name="name" value={formData.name}
+                onChange={handleInputChange} placeholder="e.g., Mumbai Central Showroom" required
               />
             </div>
             <div className="form-group" style={{ flex: 1 }}>
@@ -140,78 +177,47 @@ export default function PickupLocationManager() {
           <div className="form-group">
             <label htmlFor="address">Address *</label>
             <input
-              id="address"
-              name="address"
-              value={formData.address}
-              onChange={handleInputChange}
-              placeholder="Full address"
-              required
+              id="address" name="address" value={formData.address}
+              onChange={handleInputChange} placeholder="Full address" required
             />
           </div>
 
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="phone">Phone</label>
-              <input
-                id="phone"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                placeholder="Contact number"
-              />
+              <input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Contact number" />
             </div>
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="email">Email</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="Email address"
-              />
+              <input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="Email address" />
             </div>
           </div>
 
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="manager_name">Manager Name</label>
-              <input
-                id="manager_name"
-                name="manager_name"
-                value={formData.manager_name}
-                onChange={handleInputChange}
-                placeholder="Location manager"
-              />
+              <input id="manager_name" name="manager_name" value={formData.manager_name} onChange={handleInputChange} placeholder="Location manager" />
             </div>
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="capacity">Capacity (boxes)</label>
-              <input
-                id="capacity"
-                name="capacity"
-                type="number"
-                min="1"
-                value={formData.capacity}
-                onChange={handleInputChange}
-              />
+              <input id="capacity" name="capacity" type="number" min="1" value={formData.capacity} onChange={handleInputChange} />
             </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="notes">Notes</label>
-            <textarea
-              id="notes"
-              name="notes"
-              value={formData.notes}
-              onChange={handleInputChange}
-              placeholder="Any special notes about this location"
-              rows="3"
-            ></textarea>
+            <textarea id="notes" name="notes" value={formData.notes} onChange={handleInputChange} placeholder="Any special notes about this location" rows="3" />
           </div>
 
-          <button type="submit" className="submit-button" disabled={loading}>
-            ✅ Create Location
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="submit" className="submit-button" disabled={loading}>
+              {editingId ? '💾 Save Changes' : '✅ Create Location'}
+            </button>
+            <button type="button" onClick={cancelForm}
+              style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
@@ -243,7 +249,7 @@ export default function PickupLocationManager() {
                     <div
                       className="progress-fill"
                       style={{ width: `${(location.current_boxes / location.capacity * 100) || 0}%` }}
-                    ></div>
+                    />
                   </div>
                   <p className="capacity-text">Currently: {location.current_boxes} boxes ({Math.round((location.current_boxes / location.capacity * 100) || 0)}%)</p>
                 </div>
@@ -251,12 +257,26 @@ export default function PickupLocationManager() {
                 {location.notes && <p><strong>📝 Notes:</strong> {location.notes}</p>}
               </div>
 
-              <button
-                className="view-details-button"
-                onClick={() => getOccupancy(location.id)}
-              >
-                📊 View Occupancy
-              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <button className="view-details-button" onClick={() => getOccupancy(location.id)}>
+                  📊 View Occupancy
+                </button>
+                <button
+                  className="view-details-button"
+                  style={{ background: '#f0f9ff', color: '#0369a1', borderColor: '#bae6fd' }}
+                  onClick={() => openEditForm(location)}
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  className="view-details-button"
+                  style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
+                  onClick={() => handleDelete(location.id, location.name)}
+                  disabled={deletingId === location.id}
+                >
+                  {deletingId === location.id ? '...' : '🗑 Delete'}
+                </button>
+              </div>
             </div>
           ))
         )}
@@ -299,10 +319,7 @@ export default function PickupLocationManager() {
 
             <div className="capacity-bar" style={{ marginTop: '20px' }}>
               <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: `${selectedLocation.occupancy_percentage}%` }}
-                ></div>
+                <div className="progress-fill" style={{ width: `${selectedLocation.occupancy_percentage}%` }} />
               </div>
               <p style={{ textAlign: 'center', marginTop: '10px', color: '#666' }}>
                 {selectedLocation.boxes_stored} of {selectedLocation.capacity} boxes

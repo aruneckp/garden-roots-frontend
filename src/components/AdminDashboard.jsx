@@ -477,6 +477,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [editingPrices, setEditingPrices] = useState({});   // { [productId]: string }
   const [savingPriceId, setSavingPriceId] = useState(null);
   const [priceErrors, setPriceErrors] = useState({});       // { [productId]: string }
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD' });
+  const [addProductSaving, setAddProductSaving] = useState(false);
+  const [addProductError, setAddProductError] = useState('');
 
   // Abandoned checkouts
   const [abandonedOrders, setAbandonedOrders] = useState([]);
@@ -646,6 +650,35 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       showToast('error', `Price save failed: ${msg}`);
     }
     setSavingPriceId(null);
+  };
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    const price = parseFloat(addProductForm.price);
+    if (!addProductForm.name.trim()) { setAddProductError('Name is required.'); return; }
+    if (isNaN(price) || price <= 0) { setAddProductError('Enter a valid price.'); return; }
+    setAddProductSaving(true);
+    setAddProductError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...addProductForm, price }),
+      });
+      if (res.ok) {
+        setShowAddProduct(false);
+        setAddProductForm({ name: '', origin: '', tag: '', description: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD' });
+        await fetchAdminProducts();
+        showToast('success', `Product "${addProductForm.name}" created.`);
+      } else {
+        let msg = `Error ${res.status}`;
+        try { const b = await res.json(); msg = b.detail || b.error || msg; } catch (_) {}
+        setAddProductError(msg);
+      }
+    } catch (err) {
+      setAddProductError(err.message || 'Network error');
+    }
+    setAddProductSaving(false);
   };
 
   const fetchDeliveryBoys = async () => {
@@ -2214,7 +2247,70 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
         {activeTab === 'manage' && manageSubTab === 'products' && (
           <div className="dashboard-section">
-            <h2>🥭 Products</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ margin: 0 }}>🥭 Products</h2>
+              <button
+                className="submit-button"
+                style={{ padding: '8px 18px', fontSize: 13 }}
+                onClick={() => { setShowAddProduct(v => !v); setAddProductError(''); }}
+              >
+                {showAddProduct ? 'Cancel' : '+ Add Product'}
+              </button>
+            </div>
+
+            {showAddProduct && (
+              <form onSubmit={handleAddProduct} style={{
+                background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10,
+                padding: '20px 24px', marginBottom: 24, maxWidth: 600,
+              }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>New Product</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+                  {[
+                    { label: 'Name *', key: 'name', placeholder: 'e.g. Kesar' },
+                    { label: 'Origin', key: 'origin', placeholder: 'e.g. India' },
+                    { label: 'Tag', key: 'tag', placeholder: 'e.g. premium' },
+                    { label: 'Size / Variant Name', key: 'size_name', placeholder: 'e.g. 5kg Box' },
+                    { label: 'Unit', key: 'unit', placeholder: 'e.g. box' },
+                    { label: 'Price (SGD) *', key: 'price', placeholder: 'e.g. 49.90', type: 'number' },
+                  ].map(({ label, key, placeholder, type }) => (
+                    <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                      {label}
+                      <input
+                        type={type || 'text'}
+                        min={type === 'number' ? '0' : undefined}
+                        step={type === 'number' ? '0.5' : undefined}
+                        placeholder={placeholder}
+                        value={addProductForm[key]}
+                        onChange={e => setAddProductForm(prev => ({ ...prev, [key]: e.target.value }))}
+                        style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, fontWeight: 400 }}
+                      />
+                    </label>
+                  ))}
+                  <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                    Description
+                    <textarea
+                      rows={2}
+                      placeholder="Optional description"
+                      value={addProductForm.description}
+                      onChange={e => setAddProductForm(prev => ({ ...prev, description: e.target.value }))}
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, fontWeight: 400, resize: 'vertical', fontFamily: 'inherit' }}
+                    />
+                  </label>
+                </div>
+                {addProductError && (
+                  <p style={{ color: '#dc2626', fontSize: 12, margin: '10px 0 0', fontWeight: 600 }}>✕ {addProductError}</p>
+                )}
+                <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                  <button type="submit" className="submit-button" style={{ padding: '8px 22px' }} disabled={addProductSaving}>
+                    {addProductSaving ? 'Creating…' : 'Create Product'}
+                  </button>
+                  <button type="button" onClick={() => setShowAddProduct(false)}
+                    style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
 
             {productsLoading ? (
               <p>⏳ Loading products...</p>
