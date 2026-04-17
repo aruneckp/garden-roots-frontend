@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { orderApi, paymentApi, locationApi, promoApi } from '../services/api';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 import SimpleDeliveryFee from './SimpleDeliveryFee';
 
 export default function Checkout() {
@@ -10,7 +12,7 @@ export default function Checkout() {
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
-    user, userToken,
+    user, userToken, loginUser, setToast: setAppToast,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -98,6 +100,43 @@ export default function Checkout() {
   const displayDelivery = (deliveryType === 'pickup' || qualifiesFreeDelivery) ? 0 : dynamicDeliveryFee;
   const discountAmount   = promoApplied ? Number(promoApplied.discount_amount) : 0;
   const displayTotal     = cartTotal - discountAmount + displayDelivery;
+
+  // Guest / Google sign-in banner state
+  const googleBtnRef = useRef(null);
+  const [guestMode, setGuestMode] = useState(false);
+  const [googleAuthenticating, setGoogleAuthenticating] = useState(false);
+
+  // Initialise Google Identity Services for the inline checkout banner
+  useEffect(() => {
+    if (user || guestMode) return;
+    if (!window.google || !googleBtnRef.current) return;
+    let cancelled = false;
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: async (response) => {
+        if (cancelled) return;
+        setGoogleAuthenticating(true);
+        try {
+          const { authApi } = await import('../services/api');
+          const result = await authApi.googleLogin(response.credential);
+          const { token, user: userData } = result?.data ?? result;
+          loginUser(token, userData);
+          setAppToast(`Welcome, ${userData.name || userData.email}! 🥭`);
+          setTimeout(() => setAppToast(null), 3000);
+        } catch (err) {
+          showToast(`Login failed: ${err.message}`);
+        } finally {
+          setGoogleAuthenticating(false);
+        }
+      },
+    });
+    googleBtnRef.current.innerHTML = '';
+    window.google.accounts.id.renderButton(googleBtnRef.current, {
+      theme: 'outline', size: 'large', text: 'continue_with',
+      shape: 'rectangular', width: 260,
+    });
+    return () => { cancelled = true; };
+  }, [user, guestMode]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -487,6 +526,44 @@ export default function Checkout() {
             </div>
           ) : (
             <>
+              {/* Google sign-in or guest banner — only for non-logged-in users */}
+              {!user && !guestMode && (
+                <div className="payment-body" style={{ borderBottom: '1px solid var(--border)', textAlign: 'center', paddingBottom: 20 }}>
+                  <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+                    Sign in to track your order, or continue as a guest.
+                  </p>
+                  {googleAuthenticating ? (
+                    <div style={{ fontSize: 13, color: '#6b7280' }}>Signing in…</div>
+                  ) : (
+                    <div ref={googleBtnRef} style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }} />
+                  )}
+                  <button
+                    onClick={() => setGuestMode(true)}
+                    style={{
+                      marginTop: 4, background: 'none', border: '1px solid #d1d5db',
+                      borderRadius: 6, padding: '9px 24px', fontSize: 13, fontWeight: 600,
+                      color: '#374151', cursor: 'pointer', width: '100%', maxWidth: 260,
+                    }}
+                  >
+                    Continue as Guest
+                  </button>
+                </div>
+              )}
+
+              {!user && guestMode && (
+                <div style={{ padding: '8px 20px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>Checking out as guest</span>
+                  <button
+                    onClick={() => setGuestMode(false)}
+                    style={{ fontSize: 12, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Sign in instead
+                  </button>
+                </div>
+              )}
+
+              {/* Show checkout form only after choosing login or guest */}
+              {(user || guestMode) && <>
               {/* Delivery Type Toggle */}
               <div className="payment-body" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
                 <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Fulfilment Method</h4>
@@ -739,6 +816,7 @@ export default function Checkout() {
                   </div>
                 </div>
               )}
+            </>}
             </>
           )}
 
