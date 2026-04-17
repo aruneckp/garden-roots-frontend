@@ -249,7 +249,8 @@ export function AppProvider({ children }) {
   // Derived cart values
   const cartTotal = cart.reduce((sum, i) => sum + parseFloat(i.price.replace('$', '')) * i.qty, 0);
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
-  const delivery = 10; // default; overridden dynamically in Checkout by postal code zone
+
+  const delivery = 0; // kept for API compatibility; delivery fee is determined at checkout by postal code
 
   // Cart handlers
   const addToCart = (v) => {

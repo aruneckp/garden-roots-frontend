@@ -9,7 +9,7 @@ const FAB_TIPS = [
 
 export default function Chatbot({ hideFab = false }) {
   const {
-    cart, cartTotal, cartCount, delivery,
+    cart, cartTotal, cartCount,
     products,
     chatOpen, setChatOpen,
     chatExpanded, setChatExpanded,
@@ -81,8 +81,11 @@ export default function Chatbot({ hideFab = false }) {
                             </div>
                           ))}
                           <div className="chat-cart-total">
-                            <span>Total{delivery === 0 ? ' (Free delivery!)' : ` (+$${delivery} delivery)`}</span>
-                            <span>${cartTotal + delivery} SGD</span>
+                            <span>Subtotal</span>
+                            <span>${cartTotal} SGD</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4, textAlign: 'right' }}>
+                            Delivery fee calculated at checkout based on your address
                           </div>
                         </div>
                         <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -144,7 +147,7 @@ export default function Chatbot({ hideFab = false }) {
                 ) : m.type === 'pay-options' ? (
                   <div>
                     <div className="chat-bubble" style={{ background: '#fff', color: 'var(--text)', marginBottom: 8 }}>
-                      Ready to pay <strong>${cartTotal + delivery} SGD</strong> via PayNow?
+                      Subtotal: <strong>${cartTotal} SGD</strong>. Delivery fee will be calculated based on your address at checkout.
                     </div>
                     <div className="chat-pay-options">
                       <button className="chat-pay-btn paynow" onClick={() => { setChatOpen(false); setPaymentMethod('paynow'); setPayState('idle'); setPage('checkout'); }}>

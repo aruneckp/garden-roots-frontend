@@ -825,7 +825,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         headers,
         body: JSON.stringify({ order_ids: orderSelectedIds, new_status: bulkStatus, note: bulkNote || null }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed'); }
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}`;
+        try { const d = await res.json(); errMsg = d.detail || JSON.stringify(d) || errMsg; } catch (_) {}
+        console.error('Bulk update error:', errMsg, 'payload:', { order_ids: orderSelectedIds, new_status: bulkStatus });
+        throw new Error(errMsg);
+      }
       const data = await res.json();
       setBulkResult({ success: true, message: `Updated ${data.count} order(s) to "${data.new_status}"` });
       showToast('success', `Updated ${data.count} order(s) to "${data.new_status}".`);
