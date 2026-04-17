@@ -175,8 +175,10 @@ export function AppProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load products from API on mount
+  // Load products on mount and every time the user navigates back to the home page,
+  // OR when the admin switches back to the store view (adminView returns to 'store').
   useEffect(() => {
+    if (page !== 'home' || adminView !== 'store') return;
     const loadProducts = async () => {
       try {
         const resp = await productApi.getProducts();
@@ -220,9 +222,10 @@ export function AppProvider({ children }) {
     };
 
     loadProducts();
-  }, []);
+  }, [page, adminView]);
 
   useEffect(() => {
+    if (page !== 'home' || adminView !== 'store') return;
     const loadConfig = async () => {
       try {
         const { API_BASE } = await import('../services/api');
@@ -234,7 +237,7 @@ export function AppProvider({ children }) {
       } catch (_) {}
     };
     loadConfig();
-  }, []);
+  }, [page, adminView]);
 
   // Derived cart values
   const cartTotal = cart.reduce((sum, i) => sum + parseFloat(i.price.replace('$', '')) * i.qty, 0);
@@ -290,8 +293,12 @@ export function AppProvider({ children }) {
     setTimeout(() => {
       setChatTyping(false);
       if (addMatch) {
-        addToCart(addMatch);
-        pushBotMsg(`✅ Added **${addMatch.name}** (${addMatch.price}/box) to your cart!\n\nWant to add more or say "my cart" to review your order.`, null, null);
+        if (addMatch.is_active === 0) {
+          pushBotMsg(`Sorry, **${addMatch.name}** is currently out of stock. 😔\n\nTry another variety — say "show varieties" to see what's available!`, null, null);
+        } else {
+          addToCart(addMatch);
+          pushBotMsg(`✅ Added **${addMatch.name}** (${addMatch.price}/box) to your cart!\n\nWant to add more or say "my cart" to review your order.`, null, null);
+        }
       } else if (isVarietyPicker) {
         pushBotMsg('Here are all our premium mango varieties — tap **Add +** to add any to your cart! 🥭', 'variety-picker', null);
       } else if (isViewCart) {

@@ -111,21 +111,27 @@ export default function Chatbot({ hideFab = false }) {
                               </div>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'row', gap: 5, alignItems: 'center' }}>
-                              {inCart && (
-                                <button
-                                  className="chat-variety-clear"
-                                  onClick={() => removeFromCart(v.id)}
-                                  title="Remove from cart"
-                                >
-                                  <RiDeleteBin6Line />
-                                </button>
+                              {v.is_active === 0 ? (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>Out of Stock</span>
+                              ) : (
+                                <>
+                                  {inCart && (
+                                    <button
+                                      className="chat-variety-clear"
+                                      onClick={() => removeFromCart(v.id)}
+                                      title="Remove from cart"
+                                    >
+                                      <RiDeleteBin6Line />
+                                    </button>
+                                  )}
+                                  <button
+                                    className={`chat-variety-add${inCart ? ' in-cart' : ''}`}
+                                    onClick={() => addToCart(v)}
+                                  >
+                                    {inCart ? `In Cart (${inCart.qty})` : 'Add +'}
+                                  </button>
+                                </>
                               )}
-                              <button
-                                className={`chat-variety-add${inCart ? ' in-cart' : ''}`}
-                                onClick={() => addToCart(v)}
-                              >
-                                {inCart ? `In Cart (${inCart.qty})` : 'Add +'}
-                              </button>
                             </div>
                           </div>
                         );

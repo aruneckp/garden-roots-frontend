@@ -5,6 +5,11 @@ import PaymentTracker from './PaymentTracker';
 import PromoManager from './PromoManager';
 import { API_BASE } from '../services/api';
 import { useApp } from '../context/AppContext';
+import {
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
+import OrderEditModal from './OrderEditModal';
 
 /** Inline shipment picker used inside the expanded order detail row. */
 function ShipmentSelect({ shipments, currentId, onSave }) {
@@ -399,6 +404,7 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
 export default function AdminDashboard({ onLogout, defaultTab }) {
   const { setAdminView } = useApp();
   const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
+  const [manageSubTab, setManageSubTab] = useState('shipments');
   const [shipmentSubTab, setShipmentSubTab] = useState('list');
   const [dashboardData, setDashboardData] = useState(null);
   const [shipments, setShipments] = useState([]);
@@ -428,6 +434,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     payment_method: false,
   });
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);   // order object being edited in modal
   const [orderSelectedIds, setOrderSelectedIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkNote, setBulkNote] = useState('');
@@ -467,6 +474,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [adminProducts, setAdminProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [togglingProductId, setTogglingProductId] = useState(null);
+  const [editingPrices, setEditingPrices] = useState({});   // { [productId]: string }
+  const [savingPriceId, setSavingPriceId] = useState(null);
+  const [priceErrors, setPriceErrors] = useState({});       // { [productId]: string }
+
+  // Global toast — shared across all actions
+  const [toast, setToast] = useState(null);                 // { type: 'success'|'error', msg: string }
 
   // Config tab state
   const [bannerMessages, setBannerMessages] = useState('');
@@ -489,16 +502,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'shipments') {
+    if (activeTab === 'manage' && manageSubTab === 'shipments') {
       fetchShipments();
     }
-  }, [activeTab]);
+  }, [activeTab, manageSubTab]);
 
   useEffect(() => {
-    if (activeTab === 'shipments' && shipmentSubTab === 'create') {
+    if (activeTab === 'manage' && manageSubTab === 'shipments' && shipmentSubTab === 'create') {
       fetchAllProducts();
     }
-  }, [activeTab, shipmentSubTab]);
+  }, [activeTab, manageSubTab, shipmentSubTab]);
 
   useEffect(() => {
     if (activeTab === 'delivery') {
@@ -516,23 +529,24 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchAdminPickupLocations();
       fetchDeliveryBoys();
       if (shipments.length === 0) fetchShipments();
+      if (adminProducts.length === 0) fetchAdminProducts();
     }
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'products') {
+    if (activeTab === 'manage' && manageSubTab === 'products') {
       fetchAdminProducts();
     }
-  }, [activeTab]);
+  }, [activeTab, manageSubTab]);
 
   useEffect(() => {
-    if (activeTab === 'config') {
+    if (activeTab === 'manage' && manageSubTab === 'site-messages') {
       fetch(`${API_BASE}/api/v1/config`)
         .then(r => r.json())
         .then(json => setBannerMessages(json.data?.banner_messages || ''))
         .catch(() => {});
     }
-  }, [activeTab]);
+  }, [activeTab, manageSubTab]);
 
 
   const fetchAdminProducts = async () => {
@@ -547,19 +561,30 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     setProductsLoading(false);
   };
 
+  const showToast = (type, msg) => {
+    setToast({ type, msg });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   const handleSaveBannerMessages = async () => {
     setConfigSaving(true);
-    setConfigSuccess(false);
     try {
       const res = await fetch(`${API_BASE}/api/v1/config/banner_messages`, {
         method: 'PATCH',
         headers,
         body: JSON.stringify({ config_value: bannerMessages }),
       });
-      if (res.ok) setConfigSuccess(true);
-    } catch (_) {}
+      if (res.ok) {
+        showToast('success', 'Banner messages saved.');
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || b.error || errMsg; } catch (_) {}
+        showToast('error', `Failed to save banner: ${errMsg}`);
+      }
+    } catch (err) {
+      showToast('error', `Failed to save banner: ${err.message || 'Network error'}`);
+    }
     setConfigSaving(false);
-    setTimeout(() => setConfigSuccess(false), 3000);
   };
 
   const handleToggleProductActive = async (productId) => {
@@ -571,12 +596,50 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       });
       if (res.ok) {
         const data = await res.json();
+        const nowActive = data.data.is_active;
         setAdminProducts(prev =>
-          prev.map(p => p.id === productId ? { ...p, is_active: data.data.is_active } : p)
+          prev.map(p => p.id === productId ? { ...p, is_active: nowActive } : p)
         );
+        showToast('success', nowActive ? 'Product enabled.' : 'Product disabled.');
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || b.error || errMsg; } catch (_) {}
+        showToast('error', `Toggle failed: ${errMsg}`);
       }
-    } catch (_) {}
+    } catch (err) {
+      showToast('error', `Toggle failed: ${err.message || 'Network error'}`);
+    }
     setTogglingProductId(null);
+  };
+
+  const handleUpdatePrice = async (productId) => {
+    const raw = editingPrices[productId];
+    const price = parseFloat(raw);
+    if (isNaN(price) || price <= 0) return;
+    setSavingPriceId(productId);
+    setPriceErrors(prev => { const n = { ...prev }; delete n[productId]; return n; });
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/${productId}/price`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ price }),
+      });
+      if (res.ok) {
+        setEditingPrices(prev => { const n = { ...prev }; delete n[productId]; return n; });
+        await fetchAdminProducts();
+        showToast('success', `Price updated to $${price.toFixed(2)}.`);
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const body = await res.json(); errMsg = body.detail || body.error || errMsg; } catch (_) {}
+        setPriceErrors(prev => ({ ...prev, [productId]: errMsg }));
+        showToast('error', `Price save failed: ${errMsg}`);
+      }
+    } catch (err) {
+      const msg = err.message || 'Network error';
+      setPriceErrors(prev => ({ ...prev, [productId]: msg }));
+      showToast('error', `Price save failed: ${msg}`);
+    }
+    setSavingPriceId(null);
   };
 
   const fetchDeliveryBoys = async () => {
@@ -700,8 +763,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed'); }
       fetchAllOrders();
+      showToast('success', 'Order shipment updated.');
     } catch (err) {
-      alert('Failed to update shipment: ' + err.message);
+      showToast('error', `Failed to update shipment: ${err.message}`);
     }
   };
 
@@ -715,13 +779,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed'); }
       const data = await res.json();
-      setBulkResult({ success: true, message: `Updated ${data.count} order(s) to "${data.new_status}" by ${data.changed_by}` });
+      setBulkResult({ success: true, message: `Updated ${data.count} order(s) to "${data.new_status}"` });
+      showToast('success', `Updated ${data.count} order(s) to "${data.new_status}".`);
       setOrderSelectedIds([]);
       setBulkStatus('');
       setBulkNote('');
       fetchAllOrders();
     } catch (err) {
       setBulkResult({ success: false, message: err.message });
+      showToast('error', `Bulk update failed: ${err.message}`);
     }
   };
 
@@ -735,8 +801,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       setAllOrders(prev => prev.map(o =>
         o.id === orderId ? { ...o, payment_status: 'succeeded' } : o
       ));
+      showToast('success', `Payment collected for order #${orderId}.`);
     } catch (err) {
-      setError(err.message);
+      showToast('error', `Collect payment failed: ${err.message}`);
     }
   };
 
@@ -753,7 +820,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       setDbSuccess('Delivery boy added!');
       setDbForm({ username: '', password: '', full_name: '', phone: '' });
       fetchDeliveryBoys();
-    } catch (err) { setDbError(err.message); }
+      showToast('success', `Delivery boy "${dbForm.full_name || dbForm.username}" added.`);
+    } catch (err) {
+      setDbError(err.message);
+      showToast('error', `Failed to add delivery boy: ${err.message}`);
+    }
     finally { setDbLoading(false); }
   };
 
@@ -772,7 +843,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       setSelectedOrderIds([]);
       fetchUnassignedOrders();
       fetchAssignedOrders();
-    } catch (err) { setAssignResult({ error: err.message }); }
+      showToast('success', `${selectedOrderIds.length} order(s) assigned successfully.`);
+    } catch (err) {
+      setAssignResult({ error: err.message });
+      showToast('error', `Assign failed: ${err.message}`);
+    }
     finally { setAssignLoading(false); }
   };
 
@@ -892,7 +967,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       setVarietyBoxWeights({});
       setVarietyPricesPerKg({});
       fetchAllProducts();
-      alert('Shipment created successfully!');
+      showToast('success', 'Shipment created successfully!');
       fetchShipments();
       setShipmentSubTab('list');
     } catch (err) {
@@ -957,6 +1032,45 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
   return (
     <div className="admin-dashboard">
+
+      {/* ── Order Edit Modal ── */}
+      {editingOrder && (
+        <OrderEditModal
+          order={editingOrder}
+          headers={headers}
+          activeProducts={adminProducts.filter(p => p.is_active)}
+          onClose={() => setEditingOrder(null)}
+          onSaved={(updated) => {
+            setAllOrders(prev => prev.map(o =>
+              o.id === editingOrder.id
+                ? { ...o, order_status: updated.order_status, total_price: updated.total_price }
+                : o
+            ));
+            fetchAllOrders();
+            setEditingOrder(null);
+            showToast('success', `Order ${updated.order_ref} updated.`);
+          }}
+        />
+      )}
+
+      {/* ── Global toast notification ── */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 24, right: 24, zIndex: 9999,
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '14px 20px', borderRadius: 12, minWidth: 260, maxWidth: 420,
+          background: toast.type === 'success' ? '#dcfce7' : '#fee2e2',
+          border: `1.5px solid ${toast.type === 'success' ? '#16a34a' : '#dc2626'}`,
+          color: toast.type === 'success' ? '#15803d' : '#b91c1c',
+          fontWeight: 600, fontSize: 14,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          animation: 'fadeInDown 0.25s ease',
+        }}>
+          <span style={{ fontSize: 18 }}>{toast.type === 'success' ? '✅' : '❌'}</span>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="admin-header">
         <div className="header-content">
           <h1>🌿 Garden Roots Admin</h1>
@@ -978,16 +1092,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           📊 Dashboard
         </button>
         <button
-          className={`nav-tab ${activeTab === 'shipments' ? 'active' : ''}`}
-          onClick={() => setActiveTab('shipments')}
+          className={`nav-tab ${activeTab === 'manage' ? 'active' : ''}`}
+          onClick={() => setActiveTab('manage')}
         >
-          📦 Shipments
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'locations' ? 'active' : ''}`}
-          onClick={() => setActiveTab('locations')}
-        >
-          📍 Locations
+          🗂️ Manage
         </button>
         <button
           className={`nav-tab ${activeTab === 'payments' ? 'active' : ''}`}
@@ -1007,115 +1115,177 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         >
           📋 Orders
         </button>
-        <button
-          className={`nav-tab ${activeTab === 'products' ? 'active' : ''}`}
-          onClick={() => setActiveTab('products')}
-        >
-          🥭 Products
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'promos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('promos')}
-        >
-          🎟️ Promos
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'config' ? 'active' : ''}`}
-          onClick={() => setActiveTab('config')}
-        >
-          ⚙️ Config
-        </button>
       </div>
 
       <div className="admin-content">
         {error && <div className="error-banner">⚠️ {error}</div>}
         {loading && <div className="loading">⏳ Loading...</div>}
 
-        {activeTab === 'dashboard' && dashboardData && !loading && (
-          <div className="dashboard-section">
-            <h2>📈 Shipment Summary Dashboard</h2>
+        {activeTab === 'dashboard' && dashboardData && !loading && (() => {
+          const shipmentStatusData = [
+            { name: 'Completed',  value: dashboardData.completed_shipments,  color: '#22c55e' },
+            { name: 'In Transit', value: dashboardData.in_transit_shipments,  color: '#3b82f6' },
+            { name: 'Pending',    value: dashboardData.pending_shipments,     color: '#f59e0b' },
+          ].filter(d => d.value > 0);
 
-            <div className="stats-grid">
-              <div className="stat-card">
-                <h3>Total Shipments</h3>
-                <p className="stat-value">{dashboardData.total_shipments}</p>
+          const orderBarData = (dashboardData.shipment_summaries || []).map(s => ({
+            name:       s.shipment_ref,
+            Delivered:  s.orders_delivered,
+            Booked:     s.orders_booked,
+            'In Transit': s.orders_in_transit,
+            Pending:    s.orders_pending,
+            'Yet to Book': s.orders_yet_to_book,
+          }));
+
+          return (
+            <div className="dashboard-section">
+              <h2>📈 Dashboard</h2>
+
+              {/* ── Row 1: stat cards + donut ── */}
+              <div className="dash-row">
+                <div className="stats-grid dash-stats">
+                  <div className="stat-card">
+                    <h3>Total Shipments</h3>
+                    <p className="stat-value">{dashboardData.total_shipments}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>✅ Completed</h3>
+                    <p className="stat-value" style={{ color: '#22c55e' }}>{dashboardData.completed_shipments}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>⏳ Pending</h3>
+                    <p className="stat-value" style={{ color: '#f59e0b' }}>{dashboardData.pending_shipments}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>🚚 In Transit</h3>
+                    <p className="stat-value" style={{ color: '#3b82f6' }}>{dashboardData.in_transit_shipments}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>📦 Total Boxes</h3>
+                    <p className="stat-value">{dashboardData.total_boxes}</p>
+                  </div>
+                  <div className="stat-card">
+                    <h3>💰 Revenue</h3>
+                    <p className="stat-value" style={{ color: '#10b981' }}>
+                      ${dashboardData.total_delivery_revenue.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                {shipmentStatusData.length > 0 && (
+                  <div className="dash-chart-card">
+                    <h3 className="dash-chart-title">Shipment Status</h3>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={shipmentStatusData}
+                          cx="50%" cy="50%"
+                          innerRadius={55} outerRadius={85}
+                          paddingAngle={3}
+                          dataKey="value"
+                          label={({ name, value }) => `${name}: ${value}`}
+                          labelLine={false}
+                        >
+                          {shipmentStatusData.map((entry, i) => (
+                            <Cell key={i} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
-              <div className="stat-card">
-                <h3>✅ Completed</h3>
-                <p className="stat-value" style={{ color: '#22c55e' }}>
-                  {dashboardData.completed_shipments}
-                </p>
-              </div>
-              <div className="stat-card">
-                <h3>⏳ Pending</h3>
-                <p className="stat-value" style={{ color: '#f59e0b' }}>
-                  {dashboardData.pending_shipments}
-                </p>
-              </div>
-              <div className="stat-card">
-                <h3>🚚 In Transit</h3>
-                <p className="stat-value" style={{ color: '#3b82f6' }}>
-                  {dashboardData.in_transit_shipments}
-                </p>
-              </div>
-              <div className="stat-card">
-                <h3>📦 Total Boxes</h3>
-                <p className="stat-value">{dashboardData.total_boxes}</p>
-              </div>
-              <div className="stat-card">
-                <h3>💰 Revenue</h3>
-                <p className="stat-value" style={{ color: '#10b981' }}>
-                  ₹{dashboardData.total_delivery_revenue.toFixed(2)}
-                </p>
-              </div>
+
+              {/* ── Alert banner ── */}
+              {dashboardData.yet_to_book_globally > 0 && (
+                <div className="stat-card" style={{ marginTop: 20, background: '#fef9c3', border: '1px solid #fbbf24' }}>
+                  <h3>⚠️ Paid orders not linked to any shipment</h3>
+                  <p className="stat-value" style={{ color: '#d97706' }}>{dashboardData.yet_to_book_globally}</p>
+                </div>
+              )}
+
+              {/* ── Row 2: orders bar chart + summary table ── */}
+              {orderBarData.length > 0 && (
+                <>
+                  <h3 style={{ marginTop: 30, marginBottom: 12 }}>📦 Orders per Shipment</h3>
+                  <div className="dash-row" style={{ alignItems: 'flex-start', gap: 24 }}>
+                    <div className="dash-chart-card" style={{ flex: '1 1 420px' }}>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={orderBarData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Bar dataKey="Delivered"    stackId="a" fill="#10b981" radius={[0,0,0,0]} />
+                          <Bar dataKey="Booked"       stackId="a" fill="#22c55e" />
+                          <Bar dataKey="In Transit"   stackId="a" fill="#3b82f6" />
+                          <Bar dataKey="Pending"      stackId="a" fill="#f59e0b" />
+                          <Bar dataKey="Yet to Book"  stackId="a" fill="#ef4444" radius={[4,4,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div style={{ flex: '1 1 320px', overflowX: 'auto' }}>
+                      <table className="shipment-table">
+                        <thead>
+                          <tr>
+                            <th>Ref</th>
+                            <th>Boxes</th>
+                            <th>Total</th>
+                            <th style={{ color: '#10b981' }}>Del.</th>
+                            <th style={{ color: '#3b82f6' }}>Transit</th>
+                            <th style={{ color: '#f59e0b' }}>Pend.</th>
+                            <th style={{ color: '#ef4444' }}>Unbooked</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dashboardData.shipment_summaries.map(s => (
+                            <tr key={s.shipment_ref}>
+                              <td><strong>{s.shipment_ref}</strong></td>
+                              <td>{s.total_boxes}</td>
+                              <td>{s.orders_total}</td>
+                              <td style={{ color: '#10b981', fontWeight: 700 }}>{s.orders_delivered}</td>
+                              <td style={{ color: '#3b82f6' }}>{s.orders_in_transit}</td>
+                              <td style={{ color: '#f59e0b' }}>{s.orders_pending}</td>
+                              <td style={{ color: '#ef4444' }}>{s.orders_yet_to_book}</td>
+                              <td><span className={`status-badge status-${s.status}`}>{s.status}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+          );
+        })()}
 
-            {dashboardData.yet_to_book_globally > 0 && (
-              <div className="stat-card" style={{ marginTop: '20px', background: '#fef9c3', border: '1px solid #fbbf24' }}>
-                <h3>⚠️ Paid orders not linked to any shipment</h3>
-                <p className="stat-value" style={{ color: '#d97706' }}>{dashboardData.yet_to_book_globally}</p>
-              </div>
-            )}
-
-            <h3 style={{ marginTop: '30px' }}>📋 Shipment Summary</h3>
-            <table className="shipment-table">
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Boxes</th>
-                  <th>Orders</th>
-                  <th>Booked</th>
-                  <th>Pending</th>
-                  <th>In Transit</th>
-                  <th>Delivered</th>
-                  <th>Yet to Book</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dashboardData.shipment_summaries && dashboardData.shipment_summaries.map((summary) => (
-                  <tr key={summary.shipment_ref}>
-                    <td><strong>{summary.shipment_ref}</strong></td>
-                    <td>{summary.total_boxes}</td>
-                    <td>{summary.orders_total}</td>
-                    <td style={{ color: '#16a34a', fontWeight: 'bold' }}>{summary.orders_booked}</td>
-                    <td style={{ color: '#d97706' }}>{summary.orders_pending}</td>
-                    <td style={{ color: '#3b82f6' }}>{summary.orders_in_transit}</td>
-                    <td style={{ color: '#10b981', fontWeight: 'bold' }}>{summary.orders_delivered}</td>
-                    <td style={{ color: '#ef4444' }}>{summary.orders_yet_to_book}</td>
-                    <td>
-                      <span className={`status-badge status-${summary.status}`}>
-                        {summary.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {activeTab === 'manage' && (
+          <div className="manage-sub-nav">
+            {[
+              { key: 'shipments',     label: '📦 Shipments' },
+              { key: 'locations',     label: '📍 Locations' },
+              { key: 'products',      label: '🥭 Products' },
+              { key: 'promos',        label: '🎟️ Promos' },
+              { key: 'site-messages', label: '📢 Site Messages' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                className={`manage-sub-tab ${manageSubTab === key ? 'active' : ''}`}
+                onClick={() => setManageSubTab(key)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         )}
 
-        {activeTab === 'shipments' && !loading && (
+        {activeTab === 'manage' && manageSubTab === 'shipments' && !loading && (
           <div className="shipments-section">
             <div className="shipment-sub-nav">
               <button
@@ -1258,7 +1428,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
-        {activeTab === 'locations' && !loading && (
+        {activeTab === 'manage' && manageSubTab === 'locations' && !loading && (
           <div className="locations-section">
             <PickupLocationManager />
           </div>
@@ -1764,8 +1934,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <td onClick={e => e.stopPropagation()}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleOrderRowSelect(o.id)} />
                             </td>
-                            <td onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}>
-                              <strong className="order-ref-link">{o.order_ref}</strong>
+                            <td onClick={() => setEditingOrder(o)} title="Click to edit order">
+                              <strong className="order-ref-link" style={{ cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}>{o.order_ref}</strong>
                             </td>
                             <td>{o.customer_name}</td>
                             <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
@@ -1913,9 +2083,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
-        {activeTab === 'products' && (
+        {activeTab === 'manage' && manageSubTab === 'products' && (
           <div className="dashboard-section">
             <h2>🥭 Products</h2>
+
             {productsLoading ? (
               <p>⏳ Loading products...</p>
             ) : adminProducts.length === 0 ? (
@@ -1926,44 +2097,97 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <tr>
                     <th>#</th>
                     <th>Name</th>
-                    <th>Tag</th>
                     <th>Origin</th>
-                    <th>Season</th>
+                    <th>Price</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {adminProducts.map((product, idx) => (
-                    <tr key={product.id}>
-                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{idx + 1}</td>
-                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}><strong>{product.name}</strong></td>
-                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.tag || '—'}</td>
-                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.origin || '—'}</td>
-                      <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.season_start && product.season_end ? `${product.season_start} – ${product.season_end}` : '—'}</td>
-                      <td>
-                        <button
-                          onClick={() => handleToggleProductActive(product.id)}
-                          style={{
-                            padding: '5px 16px',
-                            borderRadius: 6,
-                            border: 'none',
-                            fontWeight: 700,
-                            fontSize: 12,
-                            letterSpacing: '0.05em',
-                            cursor: 'pointer',
-                            background: product.is_active ? '#dc2626' : '#16a34a',
-                            color: '#fff',
-                            transition: 'background 0.2s',
-                            opacity: 1,
-                          }}
-                        >
-                          {togglingProductId === product.id
-                            ? '...'
-                            : product.is_active ? 'DISABLE' : 'ENABLE'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {adminProducts.map((product, idx) => {
+                    const currentPrice = product.variants?.[0]?.price ?? null;
+                    const editVal = editingPrices[product.id];
+                    const isDirty = editVal !== undefined;
+                    return (
+                      <tr key={product.id}>
+                        <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{idx + 1}</td>
+                        <td style={{ opacity: product.is_active ? 1 : 0.45 }}><strong>{product.name}</strong></td>
+                        <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.origin || '—'}</td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ color: '#6b7280', fontWeight: 500 }}>$</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={isDirty ? editVal : (currentPrice != null ? currentPrice : '')}
+                                onChange={e => {
+                                  setEditingPrices(prev => ({ ...prev, [product.id]: e.target.value }));
+                                  setPriceErrors(prev => { const n = { ...prev }; delete n[product.id]; return n; });
+                                }}
+                                onKeyDown={e => e.key === 'Enter' && isDirty && handleUpdatePrice(product.id)}
+                                style={{
+                                  width: 70, padding: '4px 6px', borderRadius: 6,
+                                  border: `1.5px solid ${priceErrors[product.id] ? '#dc2626' : isDirty ? '#16a34a' : '#d1d5db'}`,
+                                  fontSize: 13, fontWeight: 600,
+                                }}
+                              />
+                              <button
+                                onClick={() => handleUpdatePrice(product.id)}
+                                disabled={!isDirty || savingPriceId === product.id}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 6, border: 'none',
+                                  background: isDirty ? '#16a34a' : '#e5e7eb',
+                                  color: isDirty ? '#fff' : '#9ca3af',
+                                  fontWeight: 700, fontSize: 12,
+                                  cursor: isDirty ? 'pointer' : 'not-allowed',
+                                  transition: 'background 0.2s',
+                                }}
+                              >
+                                {savingPriceId === product.id ? '…' : 'Save'}
+                              </button>
+                            </div>
+                            {priceErrors[product.id] && (
+                              <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>
+                                ✕ {priceErrors[product.id]}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '4px 10px', borderRadius: 100,
+                            background: product.is_active ? '#dcfce7' : '#fee2e2',
+                            color: product.is_active ? '#16a34a' : '#dc2626',
+                            fontWeight: 700, fontSize: 12,
+                          }}>
+                            <span style={{
+                              width: 8, height: 8, borderRadius: '50%',
+                              background: product.is_active ? '#16a34a' : '#dc2626',
+                              display: 'inline-block',
+                            }} />
+                            {product.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => handleToggleProductActive(product.id)}
+                            style={{
+                              padding: '5px 16px', borderRadius: 6, border: 'none',
+                              fontWeight: 700, fontSize: 12, letterSpacing: '0.05em',
+                              cursor: 'pointer',
+                              background: product.is_active ? '#dc2626' : '#16a34a',
+                              color: '#fff', transition: 'background 0.2s',
+                            }}
+                          >
+                            {togglingProductId === product.id ? '...' : product.is_active ? 'DISABLE' : 'ENABLE'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -1971,9 +2195,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         )}
 
 
-        {activeTab === 'config' && (
+        {activeTab === 'manage' && manageSubTab === 'site-messages' && (
           <div className="dashboard-section">
-            <h2>⚙️ Site Configuration</h2>
+            <h2>📢 Site Messages</h2>
             <div style={{ maxWidth: 620 }}>
               <label style={{ fontWeight: 600, display: 'block', marginBottom: 6 }}>
                 📢 Banner Messages (top bar)
@@ -2001,9 +2225,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 >
                   {configSaving ? 'Saving…' : 'Save'}
                 </button>
-                {configSuccess && (
-                  <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 13 }}>✅ Saved successfully</span>
-                )}
               </div>
               <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
                 Tip: each line becomes one message in the rotation.
@@ -2012,7 +2233,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
-        {activeTab === 'promos' && (
+        {activeTab === 'manage' && manageSubTab === 'promos' && (
           <div className="dashboard-section">
             <PromoManager headers={headers} />
           </div>

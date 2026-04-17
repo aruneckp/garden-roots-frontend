@@ -65,9 +65,10 @@ const authHeader = (token) => token ? { Authorization: `Bearer ${token}` } : {};
 // ---------------------------------------------------------------------------
 
 export const productApi = {
-  getProducts:       ()          => get('/api/v1/products'),
-  getProduct:        (id)        => get(`/api/v1/products/${id}`),
-  getProductVariants:(id)        => get(`/api/v1/products/${id}/variants`),
+  getProducts:       ()                   => get('/api/v1/products'),
+  getProduct:        (id)                 => get(`/api/v1/products/${id}`),
+  getProductVariants:(id)                 => get(`/api/v1/products/${id}/variants`),
+  updatePrice:       (id, price, token)   => _request(`/api/v1/products/${id}/price`, { method: 'PATCH', body: JSON.stringify({ price }), headers: { 'Content-Type': 'application/json', ...authHeader(token) } }),
 };
 
 // ---------------------------------------------------------------------------
