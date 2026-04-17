@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
-import { productApi, authApi, orderApi, paymentApi, userApi } from '../services/api';
+import { productApi, authApi, orderApi, paymentApi, userApi, API_BASE } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -207,7 +207,7 @@ export function AppProvider({ children }) {
             image: staticData.image,
             imgHeight: staticData.imgHeight || 130,
             original_price: null,
-            weight_approx: staticData.weight_approx || null,
+            weight_approx: firstVariant?.box_weight != null ? `${firstVariant.box_weight}kg` : (staticData.weight_approx || null),
             local_names: staticData.local_names || [],
             is_active: product.is_active ?? 1,
           };
@@ -228,7 +228,6 @@ export function AppProvider({ children }) {
     if (page !== 'home' || adminView !== 'store') return;
     const loadConfig = async () => {
       try {
-        const { API_BASE } = await import('../services/api');
         const res = await fetch(`${API_BASE}/api/v1/config`);
         if (res.ok) {
           const json = await res.json();

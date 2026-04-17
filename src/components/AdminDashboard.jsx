@@ -478,6 +478,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [savingPriceId, setSavingPriceId] = useState(null);
   const [priceErrors, setPriceErrors] = useState({});       // { [productId]: string }
 
+  // Abandoned checkouts
+  const [abandonedOrders, setAbandonedOrders] = useState([]);
+  const [abandonedLoading, setAbandonedLoading] = useState(false);
+  const [ordersSubTab, setOrdersSubTab] = useState('all'); // 'all' | 'abandoned'
+
   // Global toast — shared across all actions
   const [toast, setToast] = useState(null);                 // { type: 'success'|'error', msg: string }
 
@@ -526,6 +531,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   useEffect(() => {
     if (activeTab === 'orders') {
       fetchAllOrders();
+      fetchAbandonedOrders();
       fetchAdminPickupLocations();
       fetchDeliveryBoys();
       if (shipments.length === 0) fetchShipments();
@@ -737,6 +743,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       const res = await fetch(`${API_BASE}/api/v1/admin/pickup-locations`, { headers });
       if (res.ok) setAdminPickupLocations(await res.json());
     } catch (_) {}
+  };
+
+  const fetchAbandonedOrders = async () => {
+    setAbandonedLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/abandoned-checkouts`, { headers });
+      if (res.ok) setAbandonedOrders(await res.json());
+    } catch (_) {}
+    finally { setAbandonedLoading(false); }
   };
 
   const handleOrderFilterChange = (key, value) => {
@@ -1770,9 +1785,122 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <span className="orders-stat-badge orders-stat-new">{allOrders.filter(o => o.order_status === 'pending').length} New</span>
                   <span className="orders-stat-badge orders-stat-1h">⚡ {last1h} in last 1h</span>
                   <span className="orders-stat-badge orders-stat-23h">🕐 {last23h} in last 24h</span>
+                  {abandonedOrders.length > 0 && (
+                    <span className="orders-stat-badge" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}>
+                      ⚠️ {abandonedOrders.length} Abandoned
+                    </span>
+                  )}
                 </div>
               );
             })()}
+
+            {/* Sub-tab toggle: All Orders / Abandoned Checkouts */}
+            <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
+              <button
+                className={`checkout-type-btn${ordersSubTab === 'all' ? ' active' : ''}`}
+                onClick={() => setOrdersSubTab('all')}
+              >
+                📋 All Orders
+              </button>
+              <button
+                className={`checkout-type-btn${ordersSubTab === 'abandoned' ? ' active' : ''}`}
+                onClick={() => { setOrdersSubTab('abandoned'); fetchAbandonedOrders(); }}
+                style={abandonedOrders.length > 0 ? { borderColor: '#F59E0B', color: '#92400E' } : {}}
+              >
+                ⚠️ Abandoned Checkouts {abandonedOrders.length > 0 && `(${abandonedOrders.length})`}
+              </button>
+            </div>
+
+            {/* ── Abandoned Checkouts panel ── */}
+            {ordersSubTab === 'abandoned' && (
+              <div>
+                <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '14px 18px', marginBottom: 16, fontSize: 14, color: '#78350F' }}>
+                  <strong>These customers filled their cart and started checkout but never completed payment.</strong>
+                  <br />They were redirected to HitPay but didn't finish. Reach out to recover the sale.
+                </div>
+                {abandonedLoading ? (
+                  <div className="mango-loader">
+                    <span className="mango-loader-emoji">🥭</span>
+                    <div className="mango-loader-dots"><span /><span /><span /></div>
+                    <div className="mango-loader-text">Loading abandoned checkouts…</div>
+                  </div>
+                ) : abandonedOrders.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
+                    <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+                    <div style={{ fontWeight: 600 }}>No abandoned checkouts</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>All recent payment attempts have been completed.</div>
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="shipment-table orders-table">
+                      <thead>
+                        <tr>
+                          <th>Order Ref</th>
+                          <th>Customer</th>
+                          <th>Email</th>
+                          <th>Phone</th>
+                          <th>Mode</th>
+                          <th>Items</th>
+                          <th>Total</th>
+                          <th>Abandoned At</th>
+                          <th>Follow Up</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {abandonedOrders.map(o => {
+                          const phone = (o.customer_phone || '').replace(/\D/g, '');
+                          const itemSummary = o.items.map(i => `${i.variant} ×${i.qty}`).join(', ');
+                          const waText = encodeURIComponent(
+                            `Hi ${o.customer_name}! 👋 We noticed you started an order (${o.order_ref}) for $${o.total_price} SGD on Garden Roots but didn't complete the payment. Would you like help completing your order? 🥭`
+                          );
+                          const minutesAgo = o.created_at
+                            ? Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000)
+                            : null;
+                          return (
+                            <tr key={o.id} style={{ background: '#FFFBEB' }}>
+                              <td><strong style={{ color: '#d97706' }}>{o.order_ref}</strong></td>
+                              <td>{o.customer_name}</td>
+                              <td style={{ fontSize: 12 }}>{o.customer_email || '—'}</td>
+                              <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
+                              <td>
+                                <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
+                                  {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: 12, maxWidth: 200, whiteSpace: 'normal', lineHeight: 1.5 }}>{itemSummary}</td>
+                              <td><strong>${o.total_price} SGD</strong></td>
+                              <td style={{ fontSize: 12, color: '#9ca3af' }}>
+                                {minutesAgo !== null
+                                  ? minutesAgo < 60
+                                    ? `${minutesAgo}m ago`
+                                    : minutesAgo < 1440
+                                      ? `${Math.round(minutesAgo / 60)}h ago`
+                                      : `${Math.round(minutesAgo / 1440)}d ago`
+                                  : '—'}
+                              </td>
+                              <td>
+                                {phone ? (
+                                  <a
+                                    href={`https://wa.me/${phone}?text=${waText}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#25D366', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
+                                  >
+                                    💬 WhatsApp
+                                  </a>
+                                ) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {ordersSubTab === 'all' && (<>
 
             {/* ── Filter panel ── */}
             <div className="orders-filter-panel">
@@ -2080,6 +2208,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 </p>
               </div>
             )}
+            </>)}
           </div>
         )}
 

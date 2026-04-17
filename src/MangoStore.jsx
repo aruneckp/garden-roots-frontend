@@ -31,6 +31,11 @@ function StoreContent() {
   const [msgIndex, setMsgIndex] = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
 
+  // Scroll to vertical midpoint on every page change
+  useEffect(() => {
+    window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'smooth' });
+  }, [page]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setMsgVisible(false);

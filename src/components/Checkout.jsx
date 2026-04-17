@@ -5,7 +5,7 @@ import SimpleDeliveryFee from './SimpleDeliveryFee';
 
 export default function Checkout() {
   const {
-    cart, cartTotal,
+    cart, cartTotal, updateQty,
     payState, setPayState,
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
@@ -337,6 +337,17 @@ export default function Checkout() {
     );
   }
 
+  if (cart.length === 0 && payState !== 'success') {
+    return (
+      <div className="checkout-page" style={{ textAlign: 'center', padding: '60px 24px' }}>
+        <div style={{ fontSize: 72, marginBottom: 16 }}>🛒</div>
+        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, color: 'var(--dark)', marginBottom: 8 }}>Your cart is empty</h2>
+        <p style={{ color: '#78716C', fontSize: 15, marginBottom: 28 }}>Looks like you haven't added anything yet. Browse our premium mango varieties and pick your favourites!</p>
+        <button className="btn-hero" onClick={() => setPage('home')}>Shop Mangoes 🥭</button>
+      </div>
+    );
+  }
+
   return (
     <div className="checkout-page">
       <h1>Secure Checkout</h1>
@@ -398,12 +409,14 @@ export default function Checkout() {
                 {item.image
                   ? <img src={item.image} alt={item.name} className="checkout-item-img" />
                   : <span className="checkout-item-emoji">{item.emoji}</span>}
-                <div>
-                  <div className="checkout-item-name">{item.name}</div>
-                  <div className="checkout-item-qty">Qty: {item.qty}</div>
-                </div>
+                <div className="checkout-item-name">{item.name}</div>
               </div>
-              <div className="checkout-item-price">${parseFloat(item.price.replace('$', '')) * item.qty}</div>
+              <div className="checkout-item-qty-ctrl">
+                <button className="checkout-qty-btn" onClick={() => updateQty(item.id, -1)}>−</button>
+                <span className="checkout-qty-num">{item.qty}</span>
+                <button className="checkout-qty-btn" onClick={() => updateQty(item.id, +1)}>+</button>
+              </div>
+              <div className="checkout-item-price">${(parseFloat(item.price.replace('$', '')) * item.qty).toFixed(2)}</div>
             </div>
           ))}
           <hr className="checkout-divider" />
@@ -443,8 +456,13 @@ export default function Checkout() {
           {payState === 'processing' ? (
             <div className="payment-body">
               <div className="payment-processing">
-                <div className="spinner" />
-                <p style={{ color: '#78716C', fontSize: 14 }}>Verifying your payment… please wait</p>
+                <div className="mango-loader">
+                  <span className="mango-loader-emoji">🥭</span>
+                  <div className="mango-loader-dots">
+                    <span /><span /><span />
+                  </div>
+                  <div className="mango-loader-text">Verifying your payment…</div>
+                </div>
               </div>
             </div>
           ) : payState === 'failed' ? (

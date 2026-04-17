@@ -28,7 +28,13 @@ export default function VarietiesSection() {
         <h2 className="section-title">Mango Varieties</h2>
         <p className="section-sub">Each variety tells a story of its origin — a distinct personality, sweetness, and aroma.</p>
         {loadingProducts && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>Loading varieties…</div>
+          <div className="mango-loader">
+            <span className="mango-loader-emoji">🥭</span>
+            <div className="mango-loader-dots">
+              <span /><span /><span />
+            </div>
+            <div className="mango-loader-text">Loading varieties…</div>
+          </div>
         )}
         {!loadingProducts && products.length === 0 && (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#dc2626' }}>Unable to load products. Please try again later.</div>

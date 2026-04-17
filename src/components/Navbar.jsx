@@ -33,7 +33,6 @@ export default function Navbar() {
   const navigate = (link) => {
     setPage(link.toLowerCase().replace(/ /g, '-'));
     setMobileOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Close dropdowns when clicking outside
@@ -78,9 +77,9 @@ export default function Navbar() {
             <span></span>
           </button>
 
-          <div className="logo" onClick={() => { setPage('home'); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-            {'🌿 Garden'}
-            <span>Roots</span>
+          <div className="logo" onClick={() => { setPage('home'); setMobileOpen(false); }}>
+            {'🌿 '}
+            <span style={{ color: 'inherit' }}>Garden<span style={{ color: 'var(--mango)' }}>Roots</span></span>
           </div>
 
           {/* Desktop nav links */}

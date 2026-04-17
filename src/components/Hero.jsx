@@ -20,9 +20,6 @@ export default function Hero() {
     <section className={`hero${heroFading ? ' hero-fade-out' : ''}`}>
       <div className="hero-inner">
         <div>
-          <div className="hero-badge">
-            <span className="hero-badge-ticker">✦ Season 2026 <span style={{color:'#EF4444'}}>Opening Soon</span> &nbsp;&nbsp;&nbsp; ✦ Season 2026 <span style={{color:'#EF4444'}}>Opening Soon</span> &nbsp;&nbsp;&nbsp;</span>
-          </div>
           <h1>Home of Premium <em>Indian Mangoes</em></h1>
           <p>Experience the authentic taste of India's finest orchards, air-flown fresh straight to your door anywhere in Singapore.</p>
           <div className="hero-buttons">
