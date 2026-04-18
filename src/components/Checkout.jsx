@@ -97,7 +97,7 @@ export default function Checkout() {
 
   // Effective delivery fee shown in UI — zero if pickup or cart meets free-delivery threshold
   const qualifiesFreeDelivery = freeDeliveryThreshold != null && cartTotal >= freeDeliveryThreshold;
-  const displayDelivery = (deliveryType === 'pickup' || qualifiesFreeDelivery) ? 0 : dynamicDeliveryFee;
+  const displayDelivery = (deliveryType === 'pickup' || qualifiesFreeDelivery) ? 0 : (deliveryFeeLoaded ? dynamicDeliveryFee : 0);
   const discountAmount   = promoApplied ? Number(promoApplied.discount_amount) : 0;
   const displayTotal     = cartTotal - discountAmount + displayDelivery;
 
@@ -358,7 +358,18 @@ export default function Checkout() {
         <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 12, padding: '16px 20px', marginBottom: 32, textAlign: 'left', fontSize: 14, color: '#78350F', lineHeight: 1.7 }}>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>What happens next?</div>
           {selectedPaymentMethod === 'pay_later'
-            ? 'Order confirmed. Payment to be collected from the customer. Go to Admin → Orders to mark payment as received once collected.'
+            ? <>
+                Your order is confirmed! You can pay at your convenience.{' '}
+                Please reach out to us on{' '}
+                <a
+                  href="https://wa.me/6581601289"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: '#16A34A', fontWeight: 600, textDecoration: 'none' }}
+                >
+                  💬 WhatsApp +65 8160 1289
+                </a>
+              </>
             : deliveryType === 'pickup'
               ? 'We\'ll prepare your order and notify you when it\'s ready for collection. WhatsApp us to confirm your pickup slot.'
               : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
@@ -491,7 +502,7 @@ export default function Checkout() {
           )}
           <div className="checkout-total-row grand">
             <span>Total</span>
-            <span>${deliveryType === 'pickup' || deliveryFeeLoaded || qualifiesFreeDelivery ? displayTotal.toFixed(2) : cartTotal} SGD</span>
+            <span>${displayTotal.toFixed(2)} SGD</span>
           </div>
         </div>
 
@@ -765,31 +776,29 @@ export default function Checkout() {
                 </div>
               </div>
 
-              {/* Admin: payment method selector */}
-              {user?.role === 'admin' && (
-                <div className="payment-body" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-                  <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Payment Method</h4>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      className={`checkout-type-btn${selectedPaymentMethod === 'paynow' ? ' active' : ''}`}
-                      onClick={() => setSelectedPaymentMethod('paynow')}
-                    >
-                      PayNow
-                    </button>
-                    <button
-                      className={`checkout-type-btn${selectedPaymentMethod === 'pay_later' ? ' active' : ''}`}
-                      onClick={() => setSelectedPaymentMethod('pay_later')}
-                    >
-                      💰 Pay Later
-                    </button>
-                  </div>
-                  {selectedPaymentMethod === 'pay_later' && (
-                    <p style={{ fontSize: 12, color: '#78716C', marginTop: 8 }}>
-                      Order confirmed immediately. Payment collected from customer later and updated in admin panel.
-                    </p>
-                  )}
+              {/* Payment method selector */}
+              <div className="payment-body" style={{ paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+                <h4 style={{ marginBottom: 10, fontSize: 14, fontWeight: 600 }}>Payment Method</h4>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    className={`checkout-type-btn${selectedPaymentMethod === 'paynow' ? ' active' : ''}`}
+                    onClick={() => setSelectedPaymentMethod('paynow')}
+                  >
+                    PayNow
+                  </button>
+                  <button
+                    className={`checkout-type-btn${selectedPaymentMethod === 'pay_later' ? ' active' : ''}`}
+                    onClick={() => setSelectedPaymentMethod('pay_later')}
+                  >
+                    💰 Pay Later
+                  </button>
                 </div>
-              )}
+                {selectedPaymentMethod === 'pay_later' && (
+                  <p style={{ fontSize: 12, color: '#78716C', marginTop: 8 }}>
+                    Your order will be confirmed immediately. You can pay upon delivery or collection.
+                  </p>
+                )}
+              </div>
 
               {/* PayNow */}
               {selectedPaymentMethod === 'paynow' && (
@@ -804,14 +813,14 @@ export default function Checkout() {
               </div>
               )}
 
-              {/* Pay Later — admin only */}
+              {/* Pay Later */}
               {selectedPaymentMethod === 'pay_later' && (
                 <div className="payment-body">
                   <div className="paynow-box" style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
-                    <div className="paynow-amount">${displayTotal} SGD <span>to collect</span></div>
+                    <div className="paynow-amount">${displayTotal} SGD <span>to pay on delivery/collection</span></div>
                     <button className="btn-checkout" style={{ background: '#d97706' }} onClick={handlePayLater}>
-                      Confirm Order — Collect Payment Later →
+                      Confirm Order — Pay Later →
                     </button>
                   </div>
                 </div>
