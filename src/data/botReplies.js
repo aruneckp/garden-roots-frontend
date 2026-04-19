@@ -1,5 +1,5 @@
 export const BOT_REPLIES = [
-  { match: /deliver|shipping|ship|singapore/i, reply: "We deliver island-wide across Singapore! Orders placed before 2pm are dispatched same day, arriving within 24–48 hours. Free delivery on orders over $120. 🚚" },
+  { match: /deliver|shipping|ship|singapore/i, reply: "We deliver island-wide across Singapore! Free delivery on orders over $150. 🚚" },
   { match: /alphonso|hapus/i, reply: "Alphonso (Hapus) is the crown jewel of Indian mangoes 👑 — buttery, fiberless, saffron-hued flesh with an intoxicating aroma. Sourced from Ratnagiri, Maharashtra. $89/box. Season: Apr–Jun." },
   { match: /mallika/i, reply: "Mallika is a gorgeous hybrid variety from Andhra Pradesh — rich sweetness with citrusy undertones and silky, fiberless flesh. $72/box. Season: May–Jul. 🟡" },
   { match: /banganapalli|benishan/i, reply: "Banganapalli (Benishan) is a large, golden-yellow mango with firm, fiberless flesh and mild pleasant sweetness. A beloved classic from Andhra Pradesh. $70/box. Season: Apr–Jun. 🍋" },
