@@ -62,10 +62,11 @@ export function AppProvider({ children }) {
     setUser(updated);
   };
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
-  const [products, setProducts] = useState(fallbackVarieties);
-  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const [siteConfig, setSiteConfig] = useState({ banner_messages: null });
   const [pickupLocations, setPickupLocations] = useState([]);
+  const [loadingPickupLocations, setLoadingPickupLocations] = useState(true);
 
 
   // Chat state
@@ -111,6 +112,23 @@ export function AppProvider({ children }) {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [page]);
+
+  // Re-fetch latest prices from DB on every page navigation.
+  // On first mount products is empty so show the spinner; on subsequent navigations refresh silently.
+  useEffect(() => {
+    loadProducts(products.length === 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // Re-fetch prices when tab becomes visible again after inactivity
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadProducts(false);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -223,14 +241,11 @@ export function AppProvider({ children }) {
       setProducts(transformedProducts);
     } catch (err) {
       console.error('Failed to load products from API:', err);
-      if (showSpinner) setProducts([]);
+      setProducts([]);
     } finally {
       setLoadingProducts(false);
     }
   };
-
-  // Load products once on mount — fallback data renders immediately, API replaces silently
-  useEffect(() => { loadProducts(false); }, []);
 
   // When admin switches back to store view, silently refresh prices in background
   const prevAdminView = useRef(null);
@@ -253,9 +268,11 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    setLoadingPickupLocations(true);
     locationApi.getPickupLocations()
       .then(resp => setPickupLocations(resp?.data ?? resp))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoadingPickupLocations(false));
   }, []);
 
   // Derived cart values
@@ -330,7 +347,7 @@ export function AppProvider({ children }) {
           pushBotMsg('', 'pay-options', null);
         }
       } else {
-        setChatMessages(m => [...m, { from: 'bot', text: getBotReply(msg) }]);
+        setChatMessages(m => [...m, { from: 'bot', text: getBotReply(msg, products) }]);
       }
     }, 900 + Math.random() * 400);
   };
@@ -377,7 +394,7 @@ export function AppProvider({ children }) {
       // Site config
       siteConfig, setSiteConfig,
       // Pickup locations
-      pickupLocations,
+      pickupLocations, loadingPickupLocations,
     }}>
       {children}
     </AppContext.Provider>

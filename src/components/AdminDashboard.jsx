@@ -489,6 +489,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [abandonedLoading, setAbandonedLoading] = useState(false);
   const [ordersSubTab, setOrdersSubTab] = useState('all'); // 'all' | 'abandoned'
 
+  // Reports tab state
+  const [reportOrders, setReportOrders] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [selectedReportShipment, setSelectedReportShipment] = useState('all');
+  const [reportSubTab, setReportSubTab] = useState('orders-summary');
+
   // Global toast — shared across all actions
   const [toast, setToast] = useState(null);                 // { type: 'success'|'error', msg: string }
 
@@ -550,6 +556,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchAdminProducts();
     }
   }, [activeTab, manageSubTab]);
+
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      fetchReportOrders();
+      if (shipments.length === 0) fetchShipments();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'manage' && manageSubTab === 'site-messages') {
@@ -787,6 +800,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       if (res.ok) setAbandonedOrders(await res.json());
     } catch (_) {}
     finally { setAbandonedLoading(false); }
+  };
+
+  const fetchReportOrders = async () => {
+    setReportLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders`, { headers });
+      if (res.ok) setReportOrders(await res.json());
+    } catch (_) {}
+    finally { setReportLoading(false); }
   };
 
   const handleOrderFilterChange = (key, value) => {
@@ -1178,6 +1200,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           onClick={() => setActiveTab('orders')}
         >
           📋 Orders
+        </button>
+        <button
+          className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reports')}
+        >
+          📈 Reports
         </button>
       </div>
 
@@ -2486,6 +2514,203 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <PromoManager headers={headers} />
           </div>
         )}
+
+        {activeTab === 'reports' && (() => {
+          const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+          const STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled' };
+
+          const filteredByShipment = selectedReportShipment === 'all'
+            ? reportOrders
+            : reportOrders.filter(o => o.shipment_id === selectedReportShipment);
+
+          const validOrders = filteredByShipment.filter(o => o.order_status !== 'cancelled' && o.order_status !== 'pending');
+          const totalBoxes = validOrders.reduce((sum, o) => sum + (o.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);
+
+          // Group by location
+          const locationMap = {};
+          filteredByShipment.forEach(o => {
+            const loc = o.delivery_type === 'pickup'
+              ? (o.pickup_location_name || `Location #${o.pickup_location_id}`)
+              : 'Home Delivery';
+            if (!locationMap[loc]) locationMap[loc] = {};
+            const st = o.order_status;
+            locationMap[loc][st] = (locationMap[loc][st] || 0) + 1;
+          });
+          const locations = Object.keys(locationMap).sort((a, b) => a.localeCompare(b));
+
+          // Shipments with orders (to show only relevant ones)
+          const shipmentsWithOrders = shipments.filter(s =>
+            reportOrders.some(o => o.shipment_id === s.id)
+          );
+
+          return (
+            <div className="dashboard-section">
+              <h2>📈 Reports</h2>
+
+              {/* Sub-tab nav */}
+              <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
+                <button
+                  className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
+                  onClick={() => setReportSubTab('orders-summary')}
+                >Orders Summary</button>
+                <button
+                  className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
+                  onClick={() => setReportSubTab('orders-by-type')}
+                >Orders by Type</button>
+              </div>
+
+              {reportLoading ? (
+                <div className="loading">⏳ Loading report data…</div>
+              ) : (
+                <>
+                  {/* Shared: Total boxes banner + shipment filters */}
+                  <div className="report-total-banner">
+                    <span className="report-total-label">Total Valid Boxes</span>
+                    <span className="report-total-value">{totalBoxes}</span>
+                    <span className="report-total-note">(excludes Cancelled &amp; Pending orders)</span>
+                  </div>
+
+                  <div className="report-shipment-filter-bar">
+                    <button
+                      className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`}
+                      onClick={() => setSelectedReportShipment('all')}
+                    >
+                      All Shipments
+                    </button>
+                    {shipmentsWithOrders.map(s => (
+                      <button
+                        key={s.id}
+                        className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`}
+                        onClick={() => setSelectedReportShipment(s.id)}
+                      >
+                        {s.shipment_ref}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ── Orders Summary tab ── */}
+                  {reportSubTab === 'orders-summary' && (
+                    locations.length === 0 ? (
+                      <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
+                    ) : (
+                      <div className="report-table-wrap">
+                        <table className="report-location-table">
+                          <thead>
+                            <tr>
+                              <th>Location</th>
+                              {ALL_STATUSES.map(st => (
+                                <th key={st} className={`report-col-${st}`}>{STATUS_LABELS[st]}</th>
+                              ))}
+                              <th>Total Orders</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {locations.map(loc => {
+                              const row = locationMap[loc];
+                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                              return (
+                                <tr key={loc}>
+                                  <td className="report-loc-name">{loc}</td>
+                                  {ALL_STATUSES.map(st => (
+                                    <td key={st} className={`report-count${row[st] ? '' : ' zero'}`}>
+                                      {row[st] || 0}
+                                    </td>
+                                  ))}
+                                  <td className="report-row-total">{rowTotal}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="report-totals-row">
+                              <td><strong>Total</strong></td>
+                              {ALL_STATUSES.map(st => {
+                                const colTotal = locations.reduce((s, loc) => s + (locationMap[loc][st] || 0), 0);
+                                return <td key={st} className="report-count"><strong>{colTotal}</strong></td>;
+                              })}
+                              <td className="report-row-total">
+                                <strong>{filteredByShipment.length}</strong>
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )
+                  )}
+
+                  {/* ── Orders by Type tab ── */}
+                  {reportSubTab === 'orders-by-type' && (() => {
+                    // Build product map: variant name → { status → box qty }
+                    const productMap = {};
+                    filteredByShipment.forEach(o => {
+                      (o.items || []).forEach(it => {
+                        const name = it.variant || 'Unknown';
+                        if (!productMap[name]) {
+                          productMap[name] = {};
+                          ALL_STATUSES.forEach(st => { productMap[name][st] = 0; });
+                        }
+                        productMap[name][o.order_status] = (productMap[name][o.order_status] || 0) + (it.qty || 0);
+                      });
+                    });
+                    const productNames = Object.keys(productMap).sort();
+                    return productNames.length === 0 ? (
+                      <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
+                    ) : (
+                      <div className="report-table-wrap">
+                        <table className="report-location-table">
+                          <thead>
+                            <tr>
+                              <th>Product</th>
+                              {ALL_STATUSES.map(st => (
+                                <th key={st} className={`report-col-${st}`}>{STATUS_LABELS[st]} Boxes</th>
+                              ))}
+                              <th>Total Boxes</th>
+                              <th>Valid Boxes</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {productNames.map(name => {
+                              const row = productMap[name];
+                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                              const validBoxes = (row.confirmed || 0) + (row.shipped || 0) + (row.delivered || 0);
+                              return (
+                                <tr key={name}>
+                                  <td className="report-loc-name">{name}</td>
+                                  {ALL_STATUSES.map(st => (
+                                    <td key={st} className={`report-count${row[st] ? '' : ' zero'}`}>
+                                      {row[st] || 0}
+                                    </td>
+                                  ))}
+                                  <td className="report-row-total">{rowTotal}</td>
+                                  <td className="report-row-total" style={{ color: '#16a34a' }}>{validBoxes}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="report-totals-row">
+                              <td><strong>Total</strong></td>
+                              {ALL_STATUSES.map(st => {
+                                const colTotal = productNames.reduce((s, n) => s + (productMap[n][st] || 0), 0);
+                                return <td key={st} className="report-count"><strong>{colTotal}</strong></td>;
+                              })}
+                              <td className="report-row-total">
+                                <strong>{productNames.reduce((s, n) => s + ALL_STATUSES.reduce((ss, st) => ss + (productMap[n][st] || 0), 0), 0)}</strong>
+                              </td>
+                              <td className="report-row-total" style={{ color: '#16a34a' }}>
+                                <strong>{totalBoxes}</strong>
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
       </div>
     </div>

@@ -2288,3 +2288,162 @@
     font-size: 12px;
   }
 }
+
+/* ── Reports tab ── */
+.report-total-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 8px;
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.report-total-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #15803d;
+}
+
+.report-total-value {
+  font-size: 28px;
+  font-weight: 800;
+  color: #15803d;
+  line-height: 1;
+}
+
+.report-total-note {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.report-shipment-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.report-shipment-btn {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1.5px solid #d1d5db;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.report-shipment-btn:hover {
+  border-color: #2d5a3d;
+  color: #2d5a3d;
+}
+
+.report-shipment-btn.active {
+  background: #2d5a3d;
+  border-color: #2d5a3d;
+  color: #fff;
+}
+
+.report-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.report-location-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.report-location-table th {
+  background: #f9fafb;
+  padding: 10px 14px;
+  text-align: center;
+  font-weight: 700;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.report-location-table th:first-child {
+  text-align: left;
+}
+
+.report-location-table td {
+  padding: 10px 14px;
+  text-align: center;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.report-location-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.report-loc-name {
+  text-align: left !important;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.report-count {
+  font-weight: 600;
+  color: #374151;
+}
+
+.report-count.zero {
+  color: #d1d5db;
+  font-weight: 400;
+}
+
+.report-row-total {
+  font-weight: 700;
+  color: #1f2937;
+  background: #f9fafb;
+}
+
+.report-col-pending { color: #b45309; }
+.report-col-confirmed { color: #1d4ed8; }
+.report-col-shipped { color: #7c3aed; }
+.report-col-delivered { color: #15803d; }
+.report-col-cancelled { color: #dc2626; }
+
+.report-totals-row {
+  background: #f0fdf4;
+}
+
+.report-totals-row td {
+  border-top: 2px solid #bbf7d0;
+  color: #15803d;
+}
+
+@media (max-width: 600px) {
+  .report-total-banner {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+
+  .report-total-value {
+    font-size: 22px;
+  }
+
+  .report-shipment-btn {
+    font-size: 12px;
+    padding: 6px 11px;
+  }
+
+  .report-location-table th,
+  .report-location-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}

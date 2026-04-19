@@ -1080,6 +1080,9 @@ body {
 .pickup-order-btn:hover { background: var(--mango-deep); }
 .pickup-wa-btn { display: inline-flex; align-items: center; gap: 6px; background: #25D366; color: #fff; text-decoration: none; border: none; border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; width: 100%; justify-content: center; transition: background 0.2s; }
 .pickup-wa-btn:hover { background: #1da851; }
+.pickup-card-skeleton { pointer-events: none; }
+.skeleton-line { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: skeleton-shimmer 1.4s infinite; border-radius: 6px; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 .pickup-note { background: var(--mango-light); border-radius: 12px; padding: 20px 24px; margin-top: 40px; display: flex; align-items: flex-start; gap: 14px; }
 .pickup-note p { font-size: 14px; color: var(--text); line-height: 1.7; }
 @media (max-width: 900px) { .pickup-grid { grid-template-columns: repeat(2, 1fr); } }

@@ -1,11 +1,5 @@
-export const BOT_REPLIES = [
+const STATIC_REPLIES = [
   { match: /deliver|shipping|ship|singapore/i, reply: "We deliver island-wide across Singapore! Free delivery on orders over $150. 🚚" },
-  { match: /alphonso|hapus/i, reply: "Alphonso (Hapus) is the crown jewel of Indian mangoes 👑 — buttery, fiberless, saffron-hued flesh with an intoxicating aroma. Sourced from Ratnagiri, Maharashtra. $89/box. Season: Apr–Jun." },
-  { match: /mallika/i, reply: "Mallika is a gorgeous hybrid variety from Andhra Pradesh — rich sweetness with citrusy undertones and silky, fiberless flesh. $72/box. Season: May–Jul. 🟡" },
-  { match: /banganapalli|benishan/i, reply: "Banganapalli (Benishan) is a large, golden-yellow mango with firm, fiberless flesh and mild pleasant sweetness. A beloved classic from Andhra Pradesh. $70/box. Season: Apr–Jun. 🍋" },
-  { match: /chandura/i, reply: "Chandura from Karnataka is wonderfully juicy and aromatic — balanced sweetness with a light tang and incredibly soft pulp. $68/box. Season: May–Jun. 🟢" },
-  { match: /imam|himayat/i, reply: "Imam Pasand (Himayat) is royalty among mangoes 🔴 — an elegant, delicate variety from Telangana with melting texture and rich, nuanced sweetness. $50/box. Season: May–Jun." },
-  { match: /price|cost|how much|cheapest|expensive/i, reply: "Our varieties range from $32 to $50 per box — all air-flown fresh from India! 🥭\n\n🥭 Alphonso — $32\n🍋 Banganapalli — $33\n🟡 Mallika — $38\n🔴 Imam Pasand — $50\n\nFree delivery on orders over $120!" },
   { match: /season|when|available|availability/i, reply: "Indian mango season runs Apr–Aug depending on variety:\n\n• Alphonso & Banganapalli: Apr–Jun\n• Mallika, Chandura & Imam Pasand: May–Jun\n• Mallika extends to Jul 🌟\n\nWe're now open for Season 2026!" },
   { match: /pickup|collect|collection|location|store/i, reply: "We have 6 pickup points across Singapore — Jurong East, Tampines, Orchard, Ang Mo Kio, Bishan, and Woodlands! Click 'Pickup Locations' in the menu to find your nearest one. 📍" },
   { match: /organic|natural|pesticide|chemical/i, reply: "All our mangoes are naturally grown using traditional orchard practices in India. We work directly with farmers we've known for decades and prioritise quality and purity. 🌱" },
@@ -19,11 +13,46 @@ export const BOT_REPLIES = [
   { match: /thank|thanks|thx/i, reply: "You're so welcome! 🥭 If you have any more questions, I'm right here. Enjoy your mangoes!" },
 ];
 
+const VARIETY_INFO = [
+  { pattern: /alphonso|hapus/i, name: 'Alphonso', desc: "Alphonso (Hapus) is the crown jewel of Indian mangoes 👑 — buttery, fiberless, saffron-hued flesh with an intoxicating aroma. Sourced from Ratnagiri, Maharashtra. Season: Apr–Jun." },
+  { pattern: /mallika/i, name: 'Mallika', desc: "Mallika is a gorgeous hybrid variety from Andhra Pradesh — rich sweetness with citrusy undertones and silky, fiberless flesh. Season: May–Jul. 🟡" },
+  { pattern: /banganapalli|benishan/i, name: 'Banganapalli', desc: "Banganapalli (Benishan) is a large, golden-yellow mango with firm, fiberless flesh and mild pleasant sweetness. A beloved classic from Andhra Pradesh. Season: Apr–Jun. 🍋" },
+  { pattern: /chandura/i, name: 'Chandura', desc: "Chandura from Karnataka is wonderfully juicy and aromatic — balanced sweetness with a light tang and incredibly soft pulp. Season: May–Jun. 🟢" },
+  { pattern: /imam|himayat/i, name: 'Imam Pasand', desc: "Imam Pasand (Himayat) is royalty among mangoes 🔴 — an elegant, delicate variety from Telangana with melting texture and rich, nuanced sweetness. Season: May–Jun." },
+];
+
 export const QUICK_REPLIES = ["Order Mangoes", "Varieties & Prices", "My Cart", "Checkout", "Delivery Info"];
 
-export function getBotReply(text) {
-  for (const { match, reply } of BOT_REPLIES) {
+export function getBotReply(text, products = []) {
+  const getPrice = (name) => {
+    const p = products.find(p => p.name.toLowerCase() === name.toLowerCase());
+    return p?.price ?? null;
+  };
+
+  // Price / cost query — fully dynamic from DB prices
+  if (/price|cost|how much|cheapest|expensive/i.test(text)) {
+    if (products.length > 0) {
+      const active = products.filter(p => p.is_active !== 0 && p.price);
+      const lines = active.map(p => `${p.emoji || '🥭'} ${p.name} — ${p.price}`).join('\n');
+      const nums = active.map(p => parseFloat(p.price.replace('$', ''))).filter(n => !isNaN(n));
+      const range = nums.length ? `$${Math.min(...nums)} to $${Math.max(...nums)}` : '';
+      return `Our varieties range from ${range} per box — all air-flown fresh from India! 🥭\n\n${lines}\n\nFree delivery on orders over $120!`;
+    }
+    return "Our varieties are priced competitively — please check the home page or reach us at info@gardenroots.com.sg for the latest prices! 🥭";
+  }
+
+  // Individual variety queries — append live price from DB
+  for (const { pattern, name, desc } of VARIETY_INFO) {
+    if (pattern.test(text)) {
+      const price = getPrice(name);
+      return price ? `${desc} ${price}/box.` : desc;
+    }
+  }
+
+  // Static replies with no price data
+  for (const { match, reply } of STATIC_REPLIES) {
     if (match.test(text)) return reply;
   }
+
   return "Great question! 🥭 For the most accurate answer, feel free to reach us at info@gardenroots.com.sg or call +65 8160 1289 (Mon–Sat, 9am–6pm SGT). We're happy to help!";
 }

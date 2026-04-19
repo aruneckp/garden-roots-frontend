@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { API_BASE } from '../services/api';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+const PAYMENT_STATUS_OPTIONS = ['pending', 'succeeded', 'failed', 'cancelled'];
 
 export default function OrderEditModal({ order, headers, activeProducts, pickupLocations, onClose, onSaved }) {
   // Editable fields
@@ -11,6 +12,7 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
   const [deliveryAddress,   setDeliveryAddress]   = useState(order.delivery_address || '');
   const [customerNotes,     setCustomerNotes]     = useState(order.customer_notes   || '');
   const [orderStatus,       setOrderStatus]       = useState(order.order_status     || 'pending');
+  const [paymentStatus,     setPaymentStatus]     = useState(order.payment_status   || 'pending');
   const [deliveryType,      setDeliveryType]      = useState(order.delivery_type    || 'delivery');
   const [pickupLocationId,  setPickupLocationId]  = useState(order.pickup_location_id || '');
 
@@ -35,9 +37,10 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
   // Add a specific variant from the active products list
   const handleAddVariant = (product, variant) => {
     if (!variant?.id) return;
-    const label = product.variants.length > 1
-      ? `${product.name} (${variant.size_name || variant.unit || ''})`
-      : product.name;
+    const sizeSuffix = product.variants.length > 1 && variant.size_name && variant.size_name !== 'Standard'
+      ? ` (${variant.size_name})`
+      : '';
+    const label = `${product.name}${sizeSuffix}`;
     setItems(prev => {
       const existing = prev.findIndex(it => it.product_variant_id === variant.id);
       if (existing >= 0) {
@@ -88,6 +91,7 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
           delivery_address:   deliveryType === 'delivery' ? (deliveryAddress || null) : null,
           customer_notes:     customerNotes     || null,
           order_status:       orderStatus,
+          payment_status:     paymentStatus,
           delivery_type:      deliveryType,
           pickup_location_id: deliveryType === 'pickup' ? (parseInt(pickupLocationId) || null) : null,
           items: validItems,
@@ -201,6 +205,14 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                 <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
               ))}
             </select>
+
+            <label className="oem-label" style={{ marginTop: 12 }}>Payment Status</label>
+            <select className="oem-input" value={paymentStatus}
+              onChange={e => setPaymentStatus(e.target.value)}>
+              {PAYMENT_STATUS_OPTIONS.map(s => (
+                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              ))}
+            </select>
           </div>
 
           {/* ── Right column: items + add product ── */}
@@ -245,7 +257,9 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                               onClick={() => handleAddVariant(p, v)}
                               title={alreadyIn ? 'Already in order — click to add one more' : `Add ${p.name}`}
                             >
-                              <span className="oem-variant-size">{v.size_name || v.unit || 'Standard'}</span>
+                              {v.size_name && v.size_name !== 'Standard' && (
+                                <span className="oem-variant-size">{v.size_name}</span>
+                              )}
                               <span className="oem-variant-price">${parseFloat(v.price || 0).toFixed(2)}</span>
                               <span className="oem-variant-plus">{alreadyIn ? '＋' : '+'}</span>
                             </button>
