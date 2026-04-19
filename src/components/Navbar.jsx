@@ -28,7 +28,7 @@ export default function Navbar() {
     return () => clearInterval(timer);
   }, [bannerMessages.length]);
 
-  const navLinks = ['Home', 'Varieties', 'Pickup Locations', 'About Us', 'Contact Us'];
+  const navLinks = ['Home', 'Varieties', 'About Us', 'Contact Us'];
 
   const navigate = (link) => {
     setPage(link.toLowerCase().replace(/ /g, '-'));

@@ -3,14 +3,16 @@ import { API_BASE } from '../services/api';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 
-export default function OrderEditModal({ order, headers, activeProducts, onClose, onSaved }) {
+export default function OrderEditModal({ order, headers, activeProducts, pickupLocations, onClose, onSaved }) {
   // Editable fields
-  const [customerName,    setCustomerName]    = useState(order.customer_name    || '');
-  const [customerEmail,   setCustomerEmail]   = useState(order.customer_email   || '');
-  const [customerPhone,   setCustomerPhone]   = useState(order.customer_phone   || '');
-  const [deliveryAddress, setDeliveryAddress] = useState(order.delivery_address || '');
-  const [customerNotes,   setCustomerNotes]   = useState(order.customer_notes   || '');
-  const [orderStatus,     setOrderStatus]     = useState(order.order_status     || 'pending');
+  const [customerName,      setCustomerName]      = useState(order.customer_name    || '');
+  const [customerEmail,     setCustomerEmail]     = useState(order.customer_email   || '');
+  const [customerPhone,     setCustomerPhone]     = useState(order.customer_phone   || '');
+  const [deliveryAddress,   setDeliveryAddress]   = useState(order.delivery_address || '');
+  const [customerNotes,     setCustomerNotes]     = useState(order.customer_notes   || '');
+  const [orderStatus,       setOrderStatus]       = useState(order.order_status     || 'pending');
+  const [deliveryType,      setDeliveryType]      = useState(order.delivery_type    || 'delivery');
+  const [pickupLocationId,  setPickupLocationId]  = useState(order.pickup_location_id || '');
 
   // Items: [{ product_variant_id, name, unit_price, quantity }]
   const [items, setItems] = useState(
@@ -26,21 +28,22 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
   const [error,  setError]  = useState('');
 
   // Derived totals
-  const subtotal   = items.reduce((s, it) => s + it.unit_price * it.quantity, 0);
+  const subtotal    = items.reduce((s, it) => s + it.unit_price * it.quantity, 0);
   const deliveryFee = parseFloat(order.delivery_fee) || 0;
-  const total      = subtotal + deliveryFee;
+  const total       = subtotal + deliveryFee;
 
-  // Add a product from the active products list
-  const handleAddProduct = (product) => {
-    const variantId = product.variants?.[0]?.id;
-    const price     = product.variants?.[0]?.price ?? 0;
-    if (!variantId) return;
+  // Add a specific variant from the active products list
+  const handleAddVariant = (product, variant) => {
+    if (!variant?.id) return;
+    const label = product.variants.length > 1
+      ? `${product.name} (${variant.size_name || variant.unit || ''})`
+      : product.name;
     setItems(prev => {
-      const existing = prev.findIndex(it => it.product_variant_id === variantId);
+      const existing = prev.findIndex(it => it.product_variant_id === variant.id);
       if (existing >= 0) {
         return prev.map((it, i) => i === existing ? { ...it, quantity: it.quantity + 1 } : it);
       }
-      return [...prev, { product_variant_id: variantId, name: product.name, unit_price: price, quantity: 1 }];
+      return [...prev, { product_variant_id: variant.id, name: label, unit_price: parseFloat(variant.price) || 0, quantity: 1 }];
     });
   };
 
@@ -59,6 +62,19 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
 
   const handleSave = async () => {
     if (items.length === 0) { setError('Order must have at least one item.'); return; }
+    if (deliveryType === 'delivery' && !deliveryAddress.trim()) {
+      setError('Please enter a delivery address.'); return;
+    }
+    if (deliveryType === 'pickup' && !pickupLocationId) {
+      setError('Please select a pickup location.'); return;
+    }
+    const validItems = items
+      .filter(it => it.product_variant_id != null && !isNaN(parseInt(it.product_variant_id)))
+      .map(it => ({ product_variant_id: parseInt(it.product_variant_id), quantity: parseInt(it.quantity) }));
+    if (validItems.length === 0) {
+      setError('No valid items to save. Please remove existing items and add new ones from the product list below.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -66,21 +82,24 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
         method:  'PATCH',
         headers,
         body: JSON.stringify({
-          customer_name:    customerName    || null,
-          customer_email:   customerEmail   || null,
-          customer_phone:   customerPhone   || null,
-          delivery_address: deliveryAddress || null,
-          customer_notes:   customerNotes   || null,
-          order_status:     orderStatus,
-          items: items.map(it => ({
-            product_variant_id: it.product_variant_id,
-            quantity:           it.quantity,
-          })),
+          customer_name:      customerName      || null,
+          customer_email:     customerEmail     || null,
+          customer_phone:     customerPhone     || null,
+          delivery_address:   deliveryType === 'delivery' ? (deliveryAddress || null) : null,
+          customer_notes:     customerNotes     || null,
+          order_status:       orderStatus,
+          delivery_type:      deliveryType,
+          pickup_location_id: deliveryType === 'pickup' ? (parseInt(pickupLocationId) || null) : null,
+          items: validItems,
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.detail || body.error || `Error ${res.status}`);
+        const detail = body.detail;
+        const msg = Array.isArray(detail)
+          ? detail.map(e => e.msg || JSON.stringify(e)).join('; ')
+          : detail || body.error || `Error ${res.status}`;
+        throw new Error(msg);
       }
       const data = await res.json();
       onSaved(data);
@@ -113,7 +132,7 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
 
         <div className="oem-body">
 
-          {/* ── Left column: customer + status ── */}
+          {/* ── Left column: customer + delivery + status ── */}
           <div className="oem-col">
             <div className="oem-section-title">Customer Info</div>
 
@@ -129,19 +148,53 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
             <input className="oem-input" value={customerPhone}
               onChange={e => setCustomerPhone(e.target.value)} />
 
-            {order.delivery_type === 'delivery' && (
-              <>
-                <label className="oem-label">Delivery Address</label>
-                <textarea className="oem-input oem-textarea" value={deliveryAddress}
-                  onChange={e => setDeliveryAddress(e.target.value)} rows={2} />
-              </>
-            )}
-
             <label className="oem-label">Notes</label>
             <textarea className="oem-input oem-textarea" value={customerNotes}
               onChange={e => setCustomerNotes(e.target.value)} rows={2} />
 
-            <label className="oem-label">Order Status</label>
+            {/* ── Delivery Mode ── */}
+            <div className="oem-section-title" style={{ marginTop: 16 }}>Delivery Mode</div>
+
+            <div className="oem-delivery-toggle">
+              <button
+                className={`oem-delivery-btn${deliveryType === 'delivery' ? ' active' : ''}`}
+                onClick={() => setDeliveryType('delivery')}
+                type="button"
+              >
+                🚚 Home Delivery
+              </button>
+              <button
+                className={`oem-delivery-btn${deliveryType === 'pickup' ? ' active' : ''}`}
+                onClick={() => setDeliveryType('pickup')}
+                type="button"
+              >
+                📍 Self-Collection
+              </button>
+            </div>
+
+            {deliveryType === 'delivery' && (
+              <>
+                <label className="oem-label">Delivery Address</label>
+                <textarea className="oem-input oem-textarea" value={deliveryAddress}
+                  onChange={e => setDeliveryAddress(e.target.value)} rows={2}
+                  placeholder="Enter full delivery address" />
+              </>
+            )}
+
+            {deliveryType === 'pickup' && (
+              <>
+                <label className="oem-label">Pickup Location</label>
+                <select className="oem-input" value={pickupLocationId}
+                  onChange={e => setPickupLocationId(e.target.value)}>
+                  <option value="">— Select a location —</option>
+                  {(pickupLocations || []).map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name}</option>
+                  ))}
+                </select>
+              </>
+            )}
+
+            <label className="oem-label" style={{ marginTop: 12 }}>Order Status</label>
             <select className="oem-input" value={orderStatus}
               onChange={e => setOrderStatus(e.target.value)}>
               {STATUS_OPTIONS.map(s => (
@@ -175,23 +228,32 @@ export default function OrderEditModal({ order, headers, activeProducts, onClose
             {/* Add product */}
             {activeProducts.length > 0 && (
               <>
-                <div className="oem-section-title" style={{ marginTop: 16 }}>Add Product</div>
+                <div className="oem-section-title oem-add-heading">
+                  <span>➕ Add Product</span>
+                </div>
                 <div className="oem-add-products">
-                  {activeProducts.map(p => {
-                    const price = p.variants?.[0]?.price ?? 0;
-                    const alreadyIn = items.some(it => it.product_variant_id === p.variants?.[0]?.id);
-                    return (
-                      <button
-                        key={p.id}
-                        className={`oem-add-btn${alreadyIn ? ' in-cart' : ''}`}
-                        onClick={() => handleAddProduct(p)}
-                      >
-                        <span className="oem-add-btn-name">{p.name}</span>
-                        <span className="oem-add-btn-price">${price}</span>
-                        <span className="oem-add-btn-plus">{alreadyIn ? '＋' : '+'}</span>
-                      </button>
-                    );
-                  })}
+                  {activeProducts.map(p => (
+                    <div key={p.id} className="oem-add-product-group">
+                      <div className="oem-add-product-name">{p.name}</div>
+                      <div className="oem-add-variant-row">
+                        {(p.variants || []).map(v => {
+                          const alreadyIn = items.some(it => it.product_variant_id === v.id);
+                          return (
+                            <button
+                              key={v.id}
+                              className={`oem-add-variant-btn${alreadyIn ? ' in-cart' : ''}`}
+                              onClick={() => handleAddVariant(p, v)}
+                              title={alreadyIn ? 'Already in order — click to add one more' : `Add ${p.name}`}
+                            >
+                              <span className="oem-variant-size">{v.size_name || v.unit || 'Standard'}</span>
+                              <span className="oem-variant-price">${parseFloat(v.price || 0).toFixed(2)}</span>
+                              <span className="oem-variant-plus">{alreadyIn ? '＋' : '+'}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </>
             )}

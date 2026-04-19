@@ -83,8 +83,7 @@ function FeedbackSection({ order, token, onUpdated }) {
 }
 
 export default function MyBookings() {
-  const { user, userToken, setPage, myOrders, setMyOrders, myOrdersLoading, refreshMyOrders, setShowAuthModal } = useApp();
-  const [error, setError] = useState(null);
+  const { user, userToken, setPage, myOrders, setMyOrders, myOrdersLoading, myOrdersError, refreshMyOrders, setShowAuthModal } = useApp();
   const [expandedId, setExpandedId] = useState(null);
 
   const toggleExpand = (id) => setExpandedId(prev => prev === id ? null : id);
@@ -92,7 +91,7 @@ export default function MyBookings() {
   useEffect(() => {
     if (!userToken) return;
     // Always refresh when landing on My Bookings to get latest data
-    refreshMyOrders(userToken).catch(err => setError(err.message));
+    refreshMyOrders(userToken);
   }, [userToken]);
 
   const handleFeedbackUpdated = (updatedOrder) => {
@@ -127,14 +126,14 @@ export default function MyBookings() {
         </div>
       )}
 
-      {!myOrdersLoading && error && (
+      {!myOrdersLoading && myOrdersError && (
         <div className="bookings-error">
-          <p>Could not load orders: {error}</p>
+          <p>Could not load orders: {myOrdersError}</p>
           <button className="btn-outline" onClick={() => refreshMyOrders(userToken)}>Retry</button>
         </div>
       )}
 
-      {!myOrdersLoading && !error && myOrders.length === 0 && (
+      {!myOrdersLoading && !myOrdersError && myOrders.length === 0 && (
         <div className="bookings-empty">
           <div className="bookings-empty-icon">🥭</div>
           <h2>No orders yet</h2>
@@ -143,7 +142,7 @@ export default function MyBookings() {
         </div>
       )}
 
-      {!myOrdersLoading && !error && myOrders.length > 0 && (
+      {!myOrdersLoading && !myOrdersError && myOrders.length > 0 && (
         <div className="bookings-list">
           {myOrders.map(order => {
             const statusMeta = STATUS_META[order.order_status] || { label: order.order_status, color: '#6B7280', icon: '📋', desc: '' };

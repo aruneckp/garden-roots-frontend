@@ -10,6 +10,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import OrderEditModal from './OrderEditModal';
+import OrderHistoryModal from './OrderHistoryModal';
 
 /** Inline shipment picker used inside the expanded order detail row. */
 function ShipmentSelect({ shipments, currentId, onSave }) {
@@ -434,7 +435,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     payment_method: false,
   });
   const [expandedOrderId, setExpandedOrderId] = useState(null);
-  const [editingOrder, setEditingOrder] = useState(null);   // order object being edited in modal
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [historyOrder, setHistoryOrder] = useState(null);
   const [orderSelectedIds, setOrderSelectedIds] = useState([]);
   const [bulkStatus, setBulkStatus] = useState('');
   const [bulkNote, setBulkNote] = useState('');
@@ -1087,11 +1089,20 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     <div className="admin-dashboard">
 
       {/* ── Order Edit Modal ── */}
+      {historyOrder && (
+        <OrderHistoryModal
+          order={historyOrder}
+          headers={headers}
+          onClose={() => setHistoryOrder(null)}
+        />
+      )}
+
       {editingOrder && (
         <OrderEditModal
           order={editingOrder}
           headers={headers}
           activeProducts={adminProducts.filter(p => p.is_active)}
+          pickupLocations={adminPickupLocations}
           onClose={() => setEditingOrder(null)}
           onSaved={(updated) => {
             setAllOrders(prev => prev.map(o =>
@@ -2191,6 +2202,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                       {o.delivery_code && <p><strong>Del. Code:</strong> {o.delivery_code}</p>}
                                       {o.assigned_at && <p><strong>Assigned At:</strong> {new Date(o.assigned_at).toLocaleString()}</p>}
                                       {o.customer_notes && <p><strong>Notes:</strong> {o.customer_notes}</p>}
+
+                                      <button
+                                        className="order-history-btn"
+                                        onClick={() => setHistoryOrder(o)}
+                                      >
+                                        🕑 View Order History
+                                      </button>
 
                                       {/* Shipment link editor */}
                                       <div className="order-shipment-editor">

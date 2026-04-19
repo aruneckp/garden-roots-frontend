@@ -6,10 +6,12 @@ const EMPTY_FORM = {
   name: '',
   address: '',
   phone: '',
+  whatsapp_phone: '',
   email: '',
   manager_name: '',
   location_type: 'retail',
   capacity: 100,
+  collection_hours: '',
   notes: '',
 };
 
@@ -70,10 +72,12 @@ export default function PickupLocationManager() {
       name: location.name || '',
       address: location.address || '',
       phone: location.phone || '',
+      whatsapp_phone: location.whatsapp_phone || '',
       email: location.email || '',
       manager_name: location.manager_name || '',
       location_type: location.location_type || 'retail',
       capacity: location.capacity || 100,
+      collection_hours: location.collection_hours || '',
       notes: location.notes || '',
     });
     setShowForm(true);
@@ -188,6 +192,13 @@ export default function PickupLocationManager() {
               <input id="phone" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="Contact number" />
             </div>
             <div className="form-group" style={{ flex: 1 }}>
+              <label htmlFor="whatsapp_phone">WhatsApp Number</label>
+              <input id="whatsapp_phone" name="whatsapp_phone" value={formData.whatsapp_phone} onChange={handleInputChange} placeholder="e.g. 6581601289 (no + or spaces)" />
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="email">Email</label>
               <input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="Email address" />
             </div>
@@ -202,6 +213,14 @@ export default function PickupLocationManager() {
               <label htmlFor="capacity">Capacity (boxes)</label>
               <input id="capacity" name="capacity" type="number" min="1" value={formData.capacity} onChange={handleInputChange} />
             </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="collection_hours">Collection Hours</label>
+            <input
+              id="collection_hours" name="collection_hours" value={formData.collection_hours}
+              onChange={handleInputChange} placeholder="e.g. Mon–Sat: 10 AM – 10 PM"
+            />
           </div>
 
           <div className="form-group">
@@ -240,8 +259,10 @@ export default function PickupLocationManager() {
               <div className="location-details">
                 <p><strong>📍 Address:</strong> {location.address}</p>
                 <p><strong>📱 Phone:</strong> {location.phone || 'N/A'}</p>
+                <p><strong>💬 WhatsApp:</strong> {location.whatsapp_phone || 'N/A'}</p>
                 <p><strong>📧 Email:</strong> {location.email || 'N/A'}</p>
                 <p><strong>👤 Manager:</strong> {location.manager_name || 'N/A'}</p>
+                <p><strong>🕐 Collection Hours:</strong> {location.collection_hours || 'N/A'}</p>
 
                 <div className="capacity-bar">
                   <p><strong>Capacity: {location.capacity} boxes</strong></p>

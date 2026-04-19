@@ -1,23 +1,15 @@
-import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function Hero() {
-  const { setPage } = useApp();
+  const { setPage, setFocusLocationId, pickupLocations } = useApp();
 
-  const [heroFading, setHeroFading] = useState(false);
-  const [heroHidden, setHeroHidden] = useState(false);
-
-  useEffect(() => {
-    if (window.innerWidth > 768) return;
-    const fadeTimer = setTimeout(() => setHeroFading(true), 5000);
-    const hideTimer = setTimeout(() => setHeroHidden(true), 5600);
-    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
-  }, []);
-
-  if (heroHidden) return null;
+  const goToLocation = (id) => {
+    setFocusLocationId(id);
+    setPage('pickup-locations');
+  };
 
   return (
-    <section className={`hero${heroFading ? ' hero-fade-out' : ''}`}>
+    <section className="hero">
       <div className="hero-inner">
         <div>
           <h1>Home of Premium <em>Indian Mangoes</em></h1>
@@ -27,6 +19,22 @@ export default function Hero() {
               Order Now
             </button>
             <button className="btn-hero-ghost" onClick={() => setPage('about-us')}>Our Story →</button>
+          </div>
+          <div className="hero-locations-box">
+            <div className="hero-locations-heading">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{flexShrink:0}}>
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="rgba(255,255,255,0.9)"/>
+                <circle cx="12" cy="9" r="2.5" fill="rgba(52,211,153,1)"/>
+              </svg>
+              Self-collection points
+            </div>
+            <div className="hero-locations-chips">
+              {pickupLocations.map(loc => (
+                <button key={loc.id} className="hero-loc-chip" onClick={() => goToLocation(loc.id)}>
+                  {loc.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <div className="hero-visual">

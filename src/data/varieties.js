@@ -109,7 +109,7 @@ export const varieties = [
     id: 4,
     name: "Imam Pasand",
     emoji: "🔴",
-    image: "/image.png",
+    image: "/imam_pasand.jpg",
     imgHeight: 130,
     origin: "Telangana",
     desc: "An elegant royal variety with melting texture and rich, nuanced sweetness. Known as the mango of the Nawabs.",

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties';
 import { getBotReply } from '../data/botReplies';
-import { productApi, authApi, orderApi, paymentApi, userApi, API_BASE } from '../services/api';
+import { productApi, authApi, orderApi, paymentApi, userApi, locationApi, API_BASE } from '../services/api';
 
 const AppContext = createContext(null);
 
@@ -11,6 +11,8 @@ export function AppProvider({ children }) {
   const [email, setEmail] = useState('');
   const [region, setRegion] = useState('');
   const [page, setPage] = useState('home');
+  const [focusLocationId, setFocusLocationId] = useState(null);
+  const [checkoutPickupName, setCheckoutPickupName] = useState(null);
 
   // ── User auth state ────────────────────────────────────────────────────────
   const [user, setUser] = useState(null);          // { id, email, name, picture, phone }
@@ -60,9 +62,10 @@ export function AppProvider({ children }) {
     setUser(updated);
   };
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', subject: '', message: '' });
-  const [products, setProducts] = useState([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [products, setProducts] = useState(fallbackVarieties);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [siteConfig, setSiteConfig] = useState({ banner_messages: null });
+  const [pickupLocations, setPickupLocations] = useState([]);
 
 
   // Chat state
@@ -87,17 +90,22 @@ export function AppProvider({ children }) {
   // ── My Orders (shared so MyBookings refreshes after payment) ─────────────
   const [myOrders, setMyOrders] = useState([]);
   const [myOrdersLoading, setMyOrdersLoading] = useState(false);
+  const [myOrdersError, setMyOrdersError] = useState(null);
 
   const refreshMyOrders = async (token) => {
     const t = token ?? userToken;
     if (!t) return;
     setMyOrdersLoading(true);
+    setMyOrdersError(null);
     try {
       const res = await userApi.getMyOrders(t);
       const data = res?.data ?? res;
       setMyOrders(Array.isArray(data) ? data : []);
-    } catch (_) {}
-    finally { setMyOrdersLoading(false); }
+    } catch (err) {
+      setMyOrdersError(err?.message || 'Failed to load orders. Please try again.');
+    } finally {
+      setMyOrdersLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -175,65 +183,63 @@ export function AppProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load products on mount and every time the user navigates back to the home page,
-  // OR when the admin switches back to the store view (adminView returns to 'store').
-  useEffect(() => {
-    if (page !== 'home' || adminView !== 'store') return;
-    const loadProducts = async () => {
-      try {
-        const resp = await productApi.getProducts();
-        // Backend wraps all responses: { success, data, message }
-        const rawProducts = resp?.data ?? resp;
-        const transformedProducts = rawProducts.map(product => {
-          // Variants have a flat `price` field (current active price from DB pricing table)
-          const firstVariant = product.variants?.[0];
-          // Parse price cleanly: "32.0" → "$32", "38.5" → "$38.5"
-          const rawPrice = firstVariant?.price != null ? parseFloat(firstVariant.price) : 0;
-          const price = `$${Number.isInteger(rawPrice) ? rawPrice : rawPrice}`;
-          // Match static data by name to preserve emoji/image/local-name assets (non-price UI data only)
-          const staticData = fallbackVarieties.find(v => v.name.toLowerCase() === product.name.toLowerCase()) || {};
-          return {
-            id: product.id,
-            // variantId is the DB variant id — required by the order API
-            variantId: firstVariant?.id,
-            name: product.name,
-            price,
-            tag: product.tag || staticData.tag || 'Standard',
-            season: `${product.season_start || 'Jan'}–${product.season_end || 'Dec'}`,
-            origin: product.origin || staticData.origin || 'India',
-            desc: product.description || staticData.desc || 'Premium mango variety',
-            variants: product.variants,
-            emoji: staticData.emoji || '🥭',
-            image: staticData.image,
-            imgHeight: staticData.imgHeight || 130,
-            original_price: null,
-            weight_approx: firstVariant?.box_weight != null ? `${firstVariant.box_weight}kg` : (staticData.weight_approx || null),
-            local_names: staticData.local_names || [],
-            is_active: product.is_active ?? 1,
-          };
-        });
-        const order = fallbackVarieties.map(v => v.name.toLowerCase());
-        transformedProducts.sort((a, b) => {
-          const ai = order.indexOf(a.name.toLowerCase());
-          const bi = order.indexOf(b.name.toLowerCase());
-          const ar = ai === -1 ? Infinity : ai;
-          const br = bi === -1 ? Infinity : bi;
-          return ar - br;
-        });
-        setProducts(transformedProducts);
-      } catch (err) {
-        console.error('Failed to load products from API, using fallback:', err);
-        setProducts([]);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
+  const loadProducts = async (showSpinner = false) => {
+    if (showSpinner) setLoadingProducts(true);
+    try {
+      const resp = await productApi.getProducts();
+      const rawProducts = resp?.data ?? resp;
+      const transformedProducts = rawProducts.map(product => {
+        const firstVariant = product.variants?.[0];
+        const rawPrice = firstVariant?.price != null ? parseFloat(firstVariant.price) : 0;
+        const price = `$${Number.isInteger(rawPrice) ? rawPrice : rawPrice}`;
+        const staticData = fallbackVarieties.find(v => v.name.toLowerCase() === product.name.toLowerCase()) || {};
+        return {
+          id: product.id,
+          variantId: firstVariant?.id,
+          name: product.name,
+          price,
+          tag: product.tag || staticData.tag || 'Standard',
+          season: `${product.season_start || 'Jan'}–${product.season_end || 'Dec'}`,
+          origin: product.origin || staticData.origin || 'India',
+          desc: product.description || staticData.desc || 'Premium mango variety',
+          variants: product.variants,
+          emoji: staticData.emoji || '🥭',
+          image: staticData.image,
+          imgHeight: staticData.imgHeight || 130,
+          original_price: null,
+          weight_approx: firstVariant?.box_weight != null ? `${firstVariant.box_weight}kg` : (staticData.weight_approx || null),
+          local_names: staticData.local_names || [],
+          is_active: product.is_active ?? 1,
+        };
+      });
+      const order = fallbackVarieties.map(v => v.name.toLowerCase());
+      transformedProducts.sort((a, b) => {
+        const ai = order.indexOf(a.name.toLowerCase());
+        const bi = order.indexOf(b.name.toLowerCase());
+        const ar = ai === -1 ? Infinity : ai;
+        const br = bi === -1 ? Infinity : bi;
+        return ar - br;
+      });
+      setProducts(transformedProducts);
+    } catch (err) {
+      console.error('Failed to load products from API:', err);
+      if (showSpinner) setProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
-    loadProducts();
-  }, [page, adminView]);
+  // Load products once on mount — fallback data renders immediately, API replaces silently
+  useEffect(() => { loadProducts(false); }, []);
+
+  // When admin switches back to store view, silently refresh prices in background
+  const prevAdminView = useRef(null);
+  useEffect(() => {
+    if (prevAdminView.current === 'admin' && adminView === 'store') loadProducts(false);
+    prevAdminView.current = adminView;
+  }, [adminView]);
 
   useEffect(() => {
-    if (page !== 'home' || adminView !== 'store') return;
     const loadConfig = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/v1/config`);
@@ -244,7 +250,13 @@ export function AppProvider({ children }) {
       } catch (_) {}
     };
     loadConfig();
-  }, [page, adminView]);
+  }, []);
+
+  useEffect(() => {
+    locationApi.getPickupLocations()
+      .then(resp => setPickupLocations(resp?.data ?? resp))
+      .catch(() => {});
+  }, []);
 
   // Derived cart values
   const cartTotal = cart.reduce((sum, i) => sum + parseFloat(i.price.replace('$', '')) * i.qty, 0);
@@ -327,6 +339,8 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       // Navigation
       page, setPage,
+      focusLocationId, setFocusLocationId,
+      checkoutPickupName, setCheckoutPickupName,
       // Products
       products, loadingProducts,
       // Region
@@ -353,7 +367,7 @@ export function AppProvider({ children }) {
       payState, setPayState,
       confirmedTotal,
       orderRef, setOrderRef,
-      myOrders, setMyOrders, myOrdersLoading, refreshMyOrders,
+      myOrders, setMyOrders, myOrdersLoading, myOrdersError, refreshMyOrders,
       incompleteOrderId, setIncompleteOrderId,
       // User auth
       user, userToken, showAuthModal, setShowAuthModal,
@@ -362,6 +376,8 @@ export function AppProvider({ children }) {
       adminView, setAdminView, adminInitialTab, setAdminInitialTab,
       // Site config
       siteConfig, setSiteConfig,
+      // Pickup locations
+      pickupLocations,
     }}>
       {children}
     </AppContext.Provider>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { orderApi, paymentApi, locationApi, promoApi } from '../services/api';
+import { orderApi, paymentApi, promoApi } from '../services/api';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 import SimpleDeliveryFee from './SimpleDeliveryFee';
@@ -13,6 +13,8 @@ export default function Checkout() {
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
     user, userToken, loginUser, setToast: setAppToast,
+    checkoutPickupName, setCheckoutPickupName,
+    pickupLocations,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -36,15 +38,21 @@ export default function Checkout() {
   // Delivery type
   const [deliveryType, setDeliveryType] = useState('delivery');
 
-  // Pickup locations
-  const [pickupLocations, setPickupLocations] = useState([]);
+  // Pickup locations (fetched once in AppContext, shared across all pages)
   const [selectedPickupId, setSelectedPickupId] = useState(null);
 
   useEffect(() => {
-    locationApi.getPickupLocations()
-      .then(resp => setPickupLocations(resp?.data ?? resp))
-      .catch(() => {});
-  }, []);
+    if (!checkoutPickupName || pickupLocations.length === 0) return;
+    const match = pickupLocations.find(l =>
+      l.name.toLowerCase().includes(checkoutPickupName.toLowerCase()) ||
+      checkoutPickupName.toLowerCase().includes(l.name.toLowerCase())
+    );
+    if (match) {
+      setDeliveryType('pickup');
+      setSelectedPickupId(match.id);
+    }
+    setCheckoutPickupName(null);
+  }, [checkoutPickupName, pickupLocations]);
 
   const selectedPickup = pickupLocations.find(l => l.id === selectedPickupId) || null;
 
