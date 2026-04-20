@@ -402,6 +402,16 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
   );
 }
 
+function downloadCSV(filename, headers, rows) {
+  const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminDashboard({ onLogout, defaultTab }) {
   const { setAdminView } = useApp();
   const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
@@ -1172,10 +1182,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
       <div className="admin-nav">
         <button
-          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
+          className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reports')}
         >
-          📊 Dashboard
+          📈 Reports
         </button>
         <button
           className={`nav-tab ${activeTab === 'manage' ? 'active' : ''}`}
@@ -1202,10 +1212,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           📋 Orders
         </button>
         <button
-          className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reports')}
+          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
         >
-          📈 Reports
+          📊 Dashboard
         </button>
       </div>
 
@@ -2593,6 +2603,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     locations.length === 0 ? (
                       <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
                     ) : (
+                      <>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                        <button
+                          className="report-download-btn"
+                          onClick={() => {
+                            const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
+                            const headers = ['Location', ...ALL_STATUSES.map(st => STATUS_LABELS[st]), 'Total Orders'];
+                            const rows = locations.map(loc => {
+                              const row = locationMap[loc];
+                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                              return [loc, ...ALL_STATUSES.map(st => row[st] || 0), rowTotal];
+                            });
+                            const totalsRow = ['Total', ...ALL_STATUSES.map(st => locations.reduce((s, loc) => s + (locationMap[loc][st] || 0), 0)), filteredByShipment.length];
+                            rows.push(totalsRow);
+                            downloadCSV(`orders-summary-${shipLabel}.csv`, headers, rows);
+                          }}
+                        >
+                          ⬇ Download CSV
+                        </button>
+                      </div>
                       <div className="report-table-wrap">
                         <table className="report-location-table">
                           <thead>
@@ -2635,6 +2665,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tfoot>
                         </table>
                       </div>
+                      </>
                     )
                   )}
 
@@ -2656,6 +2687,32 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     return productNames.length === 0 ? (
                       <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
                     ) : (
+                      <>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                        <button
+                          className="report-download-btn"
+                          onClick={() => {
+                            const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
+                            const headers = ['Product', ...ALL_STATUSES.map(st => `${STATUS_LABELS[st]} Boxes`), 'Total Boxes', 'Valid Boxes'];
+                            const rows = productNames.map(name => {
+                              const row = productMap[name];
+                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                              const validBoxes = (row.confirmed || 0) + (row.shipped || 0) + (row.delivered || 0);
+                              return [name, ...ALL_STATUSES.map(st => row[st] || 0), rowTotal, validBoxes];
+                            });
+                            const totalsRow = [
+                              'Total',
+                              ...ALL_STATUSES.map(st => productNames.reduce((s, n) => s + (productMap[n][st] || 0), 0)),
+                              productNames.reduce((s, n) => s + ALL_STATUSES.reduce((ss, st) => ss + (productMap[n][st] || 0), 0), 0),
+                              totalBoxes,
+                            ];
+                            rows.push(totalsRow);
+                            downloadCSV(`orders-by-type-${shipLabel}.csv`, headers, rows);
+                          }}
+                        >
+                          ⬇ Download CSV
+                        </button>
+                      </div>
                       <div className="report-table-wrap">
                         <table className="report-location-table">
                           <thead>
@@ -2704,6 +2761,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tfoot>
                         </table>
                       </div>
+                      </>
                     );
                   })()}
                 </>

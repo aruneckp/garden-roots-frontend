@@ -873,11 +873,34 @@ body {
   .cart-page { padding: 16px 16px 80px; }
   .cart-layout { grid-template-columns: 1fr; }
   .cart-summary-card { position: static; }
-  .cart-item { flex-wrap: wrap; padding: 16px; gap: 12px; }
+  .cart-item { flex-wrap: wrap; padding: 16px; gap: 12px; align-items: center; }
   .cart-item-info { flex: 1; min-width: 0; }
   .cart-qty { margin-left: auto; }
   .cart-item-subtotal { width: 100%; text-align: right; font-size: 15px; }
   .cart-remove { margin-left: auto; }
+}
+
+@media (max-width: 480px) {
+  .cart-page { padding: 10px 10px 80px; }
+  .cart-items-card { border-radius: 12px; }
+  /* Two-row item layout: [emoji | info] / [indent | qty · price · remove] */
+  .cart-item { flex-wrap: wrap; padding: 12px 14px; gap: 8px; align-items: center; }
+  .cart-item-emoji { width: 48px; height: 48px; font-size: 24px; border-radius: 10px; flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+  .cart-item-info { flex: 1; min-width: 0; }
+  .cart-item-name { font-size: 14px; }
+  .cart-item-origin { font-size: 11px; }
+  .cart-item-price { font-size: 13px; }
+  /* Second row: indented to align under info (48px emoji + 8px gap = 56px) */
+  .cart-qty { order: 3; margin-left: 56px; padding: 5px 10px; gap: 7px; flex-shrink: 0; }
+  .cart-qty button { font-size: 15px; width: 20px; height: 20px; }
+  .cart-qty span { font-size: 13px; min-width: 14px; }
+  .cart-item-subtotal { order: 4; width: auto; min-width: 0; font-size: 14px; margin-left: auto; text-align: right; }
+  .cart-remove { order: 5; margin-left: 8px; font-size: 16px; padding: 2px; }
+  /* Summary card */
+  .cart-summary-card { padding: 18px 14px; border-radius: 12px; }
+  .cart-summary-card h3 { font-size: 17px; margin-bottom: 14px; }
+  .summary-row { font-size: 13px; }
+  .summary-row.total { font-size: 15px; }
 }
 
 /* CHECKOUT / PAYMENT PAGE */

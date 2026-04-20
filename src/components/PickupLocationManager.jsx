@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 import { API_BASE } from '../services/api';
 
@@ -21,6 +21,11 @@ export default function PickupLocationManager() {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const firstInputRef = useRef(null);
+
+  useEffect(() => {
+    if (showForm) firstInputRef.current?.focus();
+  }, [showForm]);
   const [deletingId, setDeletingId] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
 
@@ -164,6 +169,7 @@ export default function PickupLocationManager() {
             <div className="form-group" style={{ flex: 1 }}>
               <label htmlFor="name">Location Name *</label>
               <input
+                ref={firstInputRef}
                 id="name" name="name" value={formData.name}
                 onChange={handleInputChange} placeholder="e.g., Mumbai Central Showroom" required
               />

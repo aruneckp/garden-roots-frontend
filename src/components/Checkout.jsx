@@ -5,6 +5,9 @@ import { orderApi, paymentApi, promoApi } from '../services/api';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 import SimpleDeliveryFee from './SimpleDeliveryFee';
 
+// Tracks whether google.accounts.id.initialize() has been called — must only happen once
+let gsiInitialized = false;
+
 export default function Checkout() {
   const {
     cart, cartTotal, updateQty,
@@ -58,6 +61,10 @@ export default function Checkout() {
 
   // Notes
   const [customerNotes, setCustomerNotes] = useState('');
+
+  // Snapshot of cart items and total captured at confirmation time (cart is cleared on confirm)
+  const [confirmedItems, setConfirmedItems] = useState([]);
+  const [confirmedDisplayTotal, setConfirmedDisplayTotal] = useState(null);
 
   // Payment method — admins can choose Pay Later for phone orders
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paynow');
@@ -119,25 +126,28 @@ export default function Checkout() {
     if (user || guestMode) return;
     if (!window.google || !googleBtnRef.current) return;
     let cancelled = false;
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: async (response) => {
-        if (cancelled) return;
-        setGoogleAuthenticating(true);
-        try {
-          const { authApi } = await import('../services/api');
-          const result = await authApi.googleLogin(response.credential);
-          const { token, user: userData } = result?.data ?? result;
-          loginUser(token, userData);
-          setAppToast(`Welcome, ${userData.name || userData.email}! 🥭`);
-          setTimeout(() => setAppToast(null), 3000);
-        } catch (err) {
-          showToast(`Login failed: ${err.message}`);
-        } finally {
-          setGoogleAuthenticating(false);
-        }
-      },
-    });
+    if (!gsiInitialized) {
+      gsiInitialized = true;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response) => {
+          if (cancelled) return;
+          setGoogleAuthenticating(true);
+          try {
+            const { authApi } = await import('../services/api');
+            const result = await authApi.googleLogin(response.credential);
+            const { token, user: userData } = result?.data ?? result;
+            loginUser(token, userData);
+            setAppToast(`Welcome, ${userData.name || userData.email}! 🥭`);
+            setTimeout(() => setAppToast(null), 3000);
+          } catch (err) {
+            showToast(`Login failed: ${err.message}`);
+          } finally {
+            setGoogleAuthenticating(false);
+          }
+        },
+      });
+    }
     googleBtnRef.current.innerHTML = '';
     window.google.accounts.id.renderButton(googleBtnRef.current, {
       theme: 'outline', size: 'large', text: 'continue_with',
@@ -274,6 +284,16 @@ export default function Checkout() {
     setPayState('success');
   };
 
+  // Clear cart and scroll to top when order is confirmed
+  useEffect(() => {
+    if (payState === 'success') {
+      setConfirmedItems(cart);
+      setConfirmedDisplayTotal(displayTotal);
+      setCart([]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [payState]);
+
   // ── Full-page order confirmation (replaces checkout layout after payment) ──
   if (payState === 'success') {
     return (
@@ -308,7 +328,7 @@ export default function Checkout() {
         {/* Items ordered */}
         <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 24px', marginBottom: 24, textAlign: 'left' }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)', marginBottom: 14 }}>Items Ordered</div>
-          {cart.map(item => (
+          {confirmedItems.map(item => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {item.image
@@ -330,7 +350,7 @@ export default function Checkout() {
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>
             <span>{selectedPaymentMethod === 'pay_later' ? 'Amount to Collect' : 'Total Paid'}</span>
-            <span style={{ color: selectedPaymentMethod === 'pay_later' ? '#d97706' : 'var(--green)' }}>${confirmedTotal ?? displayTotal.toFixed(2)} SGD</span>
+            <span style={{ color: selectedPaymentMethod === 'pay_later' ? '#d97706' : 'var(--green)' }}>${confirmedTotal ?? confirmedDisplayTotal?.toFixed(2) ?? displayTotal.toFixed(2)} SGD</span>
           </div>
         </div>
 
@@ -383,12 +403,6 @@ export default function Checkout() {
               : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
         </div>
 
-        <button
-          className="btn-checkout"
-          onClick={() => { setCart([]); setPage('home'); setPayState('idle'); }}
-        >
-          Continue Shopping
-        </button>
       </div>
     );
   }

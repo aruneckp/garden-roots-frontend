@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { userApi } from '../services/api';
 
@@ -15,6 +15,11 @@ function FeedbackSection({ order, token, onUpdated }) {
   const [text, setText]         = useState(order.delivery_feedback || '');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState(null);
+  const textareaRef             = useRef(null);
+
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
 
   // Only paid orders can have feedback
   if (order.payment_status !== 'succeeded') return null;
@@ -61,6 +66,7 @@ function FeedbackSection({ order, token, onUpdated }) {
       {editing && (
         <div className="booking-feedback-form">
           <textarea
+            ref={textareaRef}
             value={text}
             onChange={e => setText(e.target.value)}
             placeholder="How was your delivery? Any issues or comments for our team…"

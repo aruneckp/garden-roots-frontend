@@ -12,7 +12,7 @@ function shuffle(arr) {
 }
 
 export default function VarietiesSection() {
-  const { addToCart, updateQty, cart, products, loadingProducts } = useApp();
+  const { addToCart, updateQty, cart, products, loadingProducts, setPage } = useApp();
 
   // Shuffle local_names once per product ID — stable across re-renders but
   // correctly populated after the async products load completes.
@@ -108,8 +108,8 @@ export default function VarietiesSection() {
                       </div>
                       <div
                         className="vc-basket-wrap"
-                        onClick={e => { e.stopPropagation(); addToCart(v); }}
-                        title={qty === 0 ? 'Add to basket' : `${qty} in basket`}
+                        onClick={e => { e.stopPropagation(); qty > 0 ? setPage('cart') : addToCart(v); }}
+                        title={qty === 0 ? 'Add to basket' : 'View cart'}
                       >
                         <RiShoppingBasketLine
                           className={`vc-basket-icon${qty === 0 ? ' empty' : ''}`}
