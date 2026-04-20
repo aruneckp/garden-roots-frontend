@@ -402,6 +402,33 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
   );
 }
 
+function sortByCol(items, col, dir) {
+  if (!col) return items;
+  return [...items].sort((a, b) => {
+    const av = a[col], bv = b[col];
+    const cmp = (typeof av === 'number' && typeof bv === 'number')
+      ? av - bv
+      : String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function SortTh({ label, colKey, sort, onSort, className, style }) {
+  const active = sort.col === colKey;
+  return (
+    <th
+      className={className}
+      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', ...style }}
+      onClick={() => onSort(colKey)}
+    >
+      {label}
+      <span style={{ marginLeft: 4, fontSize: 10, opacity: active ? 1 : 0.25 }}>
+        {active && sort.dir === 'desc' ? '▼' : '▲'}
+      </span>
+    </th>
+  );
+}
+
 function downloadCSV(filename, headers, rows) {
   const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))];
@@ -504,6 +531,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportLoading, setReportLoading] = useState(false);
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
   const [reportSubTab, setReportSubTab] = useState('orders-summary');
+  const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
+  const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
+  const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
 
   // Global toast — shared across all actions
   const [toast, setToast] = useState(null);                 // { type: 'success'|'error', msg: string }
@@ -2567,6 +2597,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
                   onClick={() => setReportSubTab('orders-by-type')}
                 >Orders by Type</button>
+                <button
+                  className={`manage-sub-tab${reportSubTab === 'delivery-sheet' ? ' active' : ''}`}
+                  onClick={() => setReportSubTab('delivery-sheet')}
+                >Delivery Sheet</button>
               </div>
 
               {reportLoading ? (
@@ -2599,8 +2633,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   </div>
 
                   {/* ── Orders Summary tab ── */}
-                  {reportSubTab === 'orders-summary' && (
-                    locations.length === 0 ? (
+                  {reportSubTab === 'orders-summary' && (() => {
+                    const toggleSummarySort = col => setSummarySort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+                    const summaryRows = sortByCol(
+                      locations.map(loc => {
+                        const row = locationMap[loc];
+                        const total = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                        return { loc, ...Object.fromEntries(ALL_STATUSES.map(st => [st, row[st] || 0])), total };
+                      }),
+                      summarySort.col, summarySort.dir
+                    );
+                    return locations.length === 0 ? (
                       <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
                     ) : (
                       <>
@@ -2610,11 +2653,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           onClick={() => {
                             const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
                             const headers = ['Location', ...ALL_STATUSES.map(st => STATUS_LABELS[st]), 'Total Orders'];
-                            const rows = locations.map(loc => {
-                              const row = locationMap[loc];
-                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
-                              return [loc, ...ALL_STATUSES.map(st => row[st] || 0), rowTotal];
-                            });
+                            const rows = summaryRows.map(r => [r.loc, ...ALL_STATUSES.map(st => r[st]), r.total]);
                             const totalsRow = ['Total', ...ALL_STATUSES.map(st => locations.reduce((s, loc) => s + (locationMap[loc][st] || 0), 0)), filteredByShipment.length];
                             rows.push(totalsRow);
                             downloadCSV(`orders-summary-${shipLabel}.csv`, headers, rows);
@@ -2627,29 +2666,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         <table className="report-location-table">
                           <thead>
                             <tr>
-                              <th>Location</th>
+                              <SortTh label="Location" colKey="loc" sort={summarySort} onSort={toggleSummarySort} />
                               {ALL_STATUSES.map(st => (
-                                <th key={st} className={`report-col-${st}`}>{STATUS_LABELS[st]}</th>
+                                <SortTh key={st} label={STATUS_LABELS[st]} colKey={st} sort={summarySort} onSort={toggleSummarySort} className={`report-col-${st}`} />
                               ))}
-                              <th>Total Orders</th>
+                              <SortTh label="Total Orders" colKey="total" sort={summarySort} onSort={toggleSummarySort} />
                             </tr>
                           </thead>
                           <tbody>
-                            {locations.map(loc => {
-                              const row = locationMap[loc];
-                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
-                              return (
-                                <tr key={loc}>
-                                  <td className="report-loc-name">{loc}</td>
-                                  {ALL_STATUSES.map(st => (
-                                    <td key={st} className={`report-count${row[st] ? '' : ' zero'}`}>
-                                      {row[st] || 0}
-                                    </td>
-                                  ))}
-                                  <td className="report-row-total">{rowTotal}</td>
-                                </tr>
-                              );
-                            })}
+                            {summaryRows.map(r => (
+                              <tr key={r.loc}>
+                                <td className="report-loc-name">{r.loc}</td>
+                                {ALL_STATUSES.map(st => (
+                                  <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>{r[st]}</td>
+                                ))}
+                                <td className="report-row-total">{r.total}</td>
+                              </tr>
+                            ))}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
@@ -2658,16 +2691,139 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 const colTotal = locations.reduce((s, loc) => s + (locationMap[loc][st] || 0), 0);
                                 return <td key={st} className="report-count"><strong>{colTotal}</strong></td>;
                               })}
-                              <td className="report-row-total">
-                                <strong>{filteredByShipment.length}</strong>
-                              </td>
+                              <td className="report-row-total"><strong>{filteredByShipment.length}</strong></td>
                             </tr>
                           </tfoot>
                         </table>
                       </div>
                       </>
-                    )
-                  )}
+                    );
+                  })()}
+
+                  {/* ── Delivery Sheet tab ── */}
+                  {reportSubTab === 'delivery-sheet' && (() => {
+                    const deliveryOrders = filteredByShipment.filter(
+                      o => o.order_status !== 'cancelled' &&
+                           o.order_status !== 'pending' &&
+                           (o.delivery_type === 'delivery' ? o.delivery_address : true)
+                    );
+
+                    // Collect all unique item variants
+                    const allVariants = [];
+                    deliveryOrders.forEach(o => {
+                      (o.items || []).forEach(it => {
+                        if (it.variant && !allVariants.includes(it.variant)) {
+                          allVariants.push(it.variant);
+                        }
+                      });
+                    });
+                    allVariants.sort();
+
+                    // Build address → variant → qty map
+                    // Delivery orders use delivery_address; pickup orders use location name
+                    const addressMap = {};
+                    deliveryOrders.forEach(o => {
+                      const addr = o.delivery_type === 'pickup'
+                        ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                        : o.delivery_address.trim();
+                      const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
+                      if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type };
+                      (o.items || []).forEach(it => {
+                        if (it.variant) {
+                          addressMap[addr][it.variant] = (addressMap[addr][it.variant] || 0) + (it.qty || 0);
+                        }
+                      });
+                    });
+                    const addresses = Object.keys(addressMap).sort();
+
+                    if (addresses.length === 0) {
+                      return <p style={{ color: '#9ca3af', marginTop: 16 }}>No delivery orders found for this selection.</p>;
+                    }
+
+                    const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
+                    const toggleDeliverySort = col => setDeliverySort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+                    const deliveryRows = sortByCol(
+                      addresses.map(addr => {
+                        const row = addressMap[addr];
+                        const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
+                        return { addr, type: row._type, name: row._name, phone: row._phone, ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
+                      }),
+                      deliverySort.col, deliverySort.dir
+                    );
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                          <button
+                            className="report-download-btn"
+                            onClick={() => {
+                              const headers = ['Address / Collection Point', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
+                              const rows = deliveryRows.map(r => [r.addr, r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
+                              const totalsRow = [
+                                'TOTAL', '', '', '',
+                                ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)),
+                                addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0),
+                              ];
+                              rows.push(totalsRow);
+                              downloadCSV(`delivery-sheet-${shipLabel}.csv`, headers, rows);
+                            }}
+                          >
+                            ⬇ Download CSV
+                          </button>
+                        </div>
+                        <div className="report-table-wrap">
+                          <table className="report-location-table">
+                            <thead>
+                              <tr>
+                                <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
+                                <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
+                                <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
+                                <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
+                                {allVariants.map(v => (
+                                  <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />
+                                ))}
+                                <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {deliveryRows.map(r => (
+                                <tr key={r.addr}>
+                                  <td className="report-loc-name" style={{ fontSize: 12 }}>{r.addr}</td>
+                                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                                    <span style={{
+                                      padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                                      background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7',
+                                      color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d',
+                                    }}>{r.type}</span>
+                                  </td>
+                                  <td style={{ fontSize: 12 }}>{r.name}</td>
+                                  <td style={{ fontSize: 12 }}>{r.phone}</td>
+                                  {allVariants.map(v => (
+                                    <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>
+                                  ))}
+                                  <td className="report-row-total">{r.total}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="report-totals-row">
+                                <td colSpan={4}><strong>Total</strong></td>
+                                {allVariants.map(v => {
+                                  const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
+                                  return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
+                                })}
+                                <td className="report-row-total">
+                                  <strong>
+                                    {addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}
+                                  </strong>
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   {/* ── Orders by Type tab ── */}
                   {reportSubTab === 'orders-by-type' && (() => {
@@ -2684,6 +2840,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       });
                     });
                     const productNames = Object.keys(productMap).sort();
+                    const toggleTypeSort = col => setTypeSort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+                    const typeRows = sortByCol(
+                      productNames.map(name => {
+                        const row = productMap[name];
+                        const total = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
+                        const valid = (row.confirmed || 0) + (row.shipped || 0) + (row.delivered || 0);
+                        return { name, ...Object.fromEntries(ALL_STATUSES.map(st => [st, row[st] || 0])), total, valid };
+                      }),
+                      typeSort.col, typeSort.dir
+                    );
                     return productNames.length === 0 ? (
                       <p style={{ color: '#9ca3af', marginTop: 16 }}>No orders found for this selection.</p>
                     ) : (
@@ -2694,12 +2860,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           onClick={() => {
                             const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
                             const headers = ['Product', ...ALL_STATUSES.map(st => `${STATUS_LABELS[st]} Boxes`), 'Total Boxes', 'Valid Boxes'];
-                            const rows = productNames.map(name => {
-                              const row = productMap[name];
-                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
-                              const validBoxes = (row.confirmed || 0) + (row.shipped || 0) + (row.delivered || 0);
-                              return [name, ...ALL_STATUSES.map(st => row[st] || 0), rowTotal, validBoxes];
-                            });
+                            const rows = typeRows.map(r => [r.name, ...ALL_STATUSES.map(st => r[st]), r.total, r.valid]);
                             const totalsRow = [
                               'Total',
                               ...ALL_STATUSES.map(st => productNames.reduce((s, n) => s + (productMap[n][st] || 0), 0)),
@@ -2717,32 +2878,25 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         <table className="report-location-table">
                           <thead>
                             <tr>
-                              <th>Product</th>
+                              <SortTh label="Product" colKey="name" sort={typeSort} onSort={toggleTypeSort} />
                               {ALL_STATUSES.map(st => (
-                                <th key={st} className={`report-col-${st}`}>{STATUS_LABELS[st]} Boxes</th>
+                                <SortTh key={st} label={`${STATUS_LABELS[st]} Boxes`} colKey={st} sort={typeSort} onSort={toggleTypeSort} className={`report-col-${st}`} />
                               ))}
-                              <th>Total Boxes</th>
-                              <th>Valid Boxes</th>
+                              <SortTh label="Total Boxes" colKey="total" sort={typeSort} onSort={toggleTypeSort} />
+                              <SortTh label="Valid Boxes" colKey="valid" sort={typeSort} onSort={toggleTypeSort} />
                             </tr>
                           </thead>
                           <tbody>
-                            {productNames.map(name => {
-                              const row = productMap[name];
-                              const rowTotal = ALL_STATUSES.reduce((s, st) => s + (row[st] || 0), 0);
-                              const validBoxes = (row.confirmed || 0) + (row.shipped || 0) + (row.delivered || 0);
-                              return (
-                                <tr key={name}>
-                                  <td className="report-loc-name">{name}</td>
-                                  {ALL_STATUSES.map(st => (
-                                    <td key={st} className={`report-count${row[st] ? '' : ' zero'}`}>
-                                      {row[st] || 0}
-                                    </td>
-                                  ))}
-                                  <td className="report-row-total">{rowTotal}</td>
-                                  <td className="report-row-total" style={{ color: '#16a34a' }}>{validBoxes}</td>
-                                </tr>
-                              );
-                            })}
+                            {typeRows.map(r => (
+                              <tr key={r.name}>
+                                <td className="report-loc-name">{r.name}</td>
+                                {ALL_STATUSES.map(st => (
+                                  <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>{r[st]}</td>
+                                ))}
+                                <td className="report-row-total">{r.total}</td>
+                                <td className="report-row-total" style={{ color: '#16a34a' }}>{r.valid}</td>
+                              </tr>
+                            ))}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">

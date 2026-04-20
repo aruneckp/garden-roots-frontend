@@ -13,6 +13,17 @@ const EMPTY_FORM = {
   specific_location_id: '',
 };
 
+function sortByCol(items, col, dir) {
+  if (!col) return items;
+  return [...items].sort((a, b) => {
+    const av = a[col], bv = b[col];
+    const cmp = (typeof av === 'number' && typeof bv === 'number')
+      ? av - bv
+      : String(av ?? '').localeCompare(String(bv ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+    return dir === 'asc' ? cmp : -cmp;
+  });
+}
+
 export default function PromoManager({ headers, pickupLocations = [] }) {
   const [promos,  setPromos]  = useState([]);
   const [users,   setUsers]   = useState([]);
@@ -21,7 +32,8 @@ export default function PromoManager({ headers, pickupLocations = [] }) {
   const [form,    setForm]    = useState(EMPTY_FORM);
   const [saving,  setSaving]  = useState(false);
   const [success, setSuccess] = useState(null);
-  const [editId,  setEditId]  = useState(null);   // null = create mode
+  const [editId,  setEditId]  = useState(null);
+  const [promoSort, setPromoSort] = useState({ col: null, dir: 'asc' });
 
   const token = () =>
     headers?.Authorization?.replace('Bearer ', '') ||
@@ -249,13 +261,40 @@ export default function PromoManager({ headers, pickupLocations = [] }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-                {['Code', 'Type', 'Discount', 'Min Order', 'Expiry', 'Limit', 'Used', 'Status', 'Actions'].map(h => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#374151' }}>{h}</th>
+                {[
+                  { label: 'Code', key: 'code' },
+                  { label: 'Type', key: 'promo_type' },
+                  { label: 'Discount', key: 'discount_value' },
+                  { label: 'Min Order', key: 'min_order_amount' },
+                  { label: 'Expiry', key: 'expiry_date' },
+                  { label: 'Limit', key: 'redemption_limit' },
+                  { label: 'Used', key: 'total_used' },
+                  { label: 'Status', key: '_status' },
+                  { label: 'Actions', key: null },
+                ].map(({ label, key }) => (
+                  <th
+                    key={label}
+                    style={{
+                      padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#374151',
+                      cursor: key ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap',
+                    }}
+                    onClick={() => key && setPromoSort(p => ({ col: key, dir: p.col === key && p.dir === 'asc' ? 'desc' : 'asc' }))}
+                  >
+                    {label}
+                    {key && (
+                      <span style={{ marginLeft: 4, fontSize: 10, opacity: promoSort.col === key ? 1 : 0.25 }}>
+                        {promoSort.col === key && promoSort.dir === 'desc' ? '▼' : '▲'}
+                      </span>
+                    )}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {promos.map(p => {
+              {sortByCol(
+                promos.map(p => ({ ...p, _status: p.is_active === 1 && !(new Date() > new Date(p.expiry_date)) ? 'Active' : new Date() > new Date(p.expiry_date) ? 'Expired' : 'Inactive' })),
+                promoSort.col, promoSort.dir
+              ).map(p => {
                 const expired = new Date() > new Date(p.expiry_date);
                 const active = p.is_active === 1 && !expired;
                 return (
