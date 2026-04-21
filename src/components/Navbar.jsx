@@ -97,7 +97,7 @@ export default function Navbar() {
                   <a
                     href="#"
                     className="admin-nav-link"
-                    onClick={e => { e.preventDefault(); setAdminInitialTab('dashboard'); setAdminView('admin'); }}
+                    onClick={e => { e.preventDefault(); setAdminInitialTab('reports'); setAdminView('admin'); }}
                   >
                     🔧 Admin
                   </a>
@@ -186,7 +186,7 @@ export default function Navbar() {
                     <>
                       <li className="mobile-nav-divider" />
                       <li>
-                        <a href="#" className="admin-nav-link" onClick={e => { e.preventDefault(); setAdminInitialTab('dashboard'); setAdminView('admin'); setMobileOpen(false); }}>
+                        <a href="#" className="admin-nav-link" onClick={e => { e.preventDefault(); setAdminInitialTab('reports'); setAdminView('admin'); setMobileOpen(false); }}>
                           🔧 Admin Panel
                         </a>
                       </li>

@@ -1,8 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 
 export default function PickupLocations() {
-  const { focusLocationId, setFocusLocationId, setPage, setCheckoutPickupName, cart, setToast, pickupLocations } = useApp();
+  const { focusLocationId, setFocusLocationId, setPage, setCheckoutPickupName, cart, setToast, pickupLocations, siteConfig } = useApp();
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!focusLocationId) return;
@@ -44,43 +53,66 @@ export default function PickupLocations() {
         <div className="section-label">Our Pickup Points</div>
         <h2 className="section-title">Find Your Nearest Location</h2>
         <div className="pickup-grid">
-          {pickupLocations.map(loc => (
-            <div className="pickup-card" key={loc.id} id={`loc-${loc.id}`}>
-              <h4>📍 {loc.name}</h4>
-              {loc.collection_hours && (
-                <p className="pickup-hours">🕐 {loc.collection_hours}</p>
-              )}
-              <p className="pickup-address">{loc.address}</p>
-              {loc.phone && (
-                <p className="pickup-phone">📞 {loc.phone}</p>
-              )}
-              <button
-                className="pickup-order-btn"
-                onClick={() => handleOrderNow(loc.name)}
-              >
-                🛒 Order Now
-              </button>
-              {loc.whatsapp_phone && (
-                <a
-                  className="pickup-wa-btn"
-                  href={`https://wa.me/${loc.whatsapp_phone.replace(/\D/g, '')}?text=Hi! I'd like to pick up my order at your ${loc.name} location.`}
-                  target="_blank"
-                  rel="noreferrer"
+          {pickupLocations.map(loc => {
+            const isOpen = expandedIds.has(loc.id);
+            return (
+              <div className="pickup-card" key={loc.id} id={`loc-${loc.id}`}>
+                <div
+                  onClick={() => toggleExpand(loc.id)}
+                  style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 >
-                  💬 WhatsApp to Confirm Pickup
-                </a>
-              )}
-            </div>
-          ))}
+                  <h4 style={{ margin: 0 }}>📍 {loc.name}</h4>
+                  <span style={{ fontSize: 13, color: '#9ca3af', marginLeft: 8 }}>{isOpen ? '▲' : '▼'}</span>
+                </div>
+
+                {isOpen && (
+                  <>
+                    {loc.collection_hours && (
+                      <p className="pickup-hours">🕐 {loc.collection_hours}</p>
+                    )}
+                    <p className="pickup-address">{loc.address}</p>
+                    {loc.phone && (
+                      <p className="pickup-phone">📞 {loc.phone}</p>
+                    )}
+                    <button
+                      className="pickup-order-btn"
+                      onClick={() => handleOrderNow(loc.name)}
+                    >
+                      🛒 Order Now
+                    </button>
+                    {loc.whatsapp_phone && (
+                      <a
+                        className="pickup-wa-btn"
+                        href={`https://wa.me/${loc.whatsapp_phone.replace(/\D/g, '')}?text=Hi! I'd like to pick up my order at your ${loc.name} location.`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        💬 WhatsApp to Confirm Pickup
+                      </a>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="pickup-note">
           <span style={{ fontSize: 28 }}>📦</span>
-          <p>
-            <strong>How pickup works:</strong> Place your order online, then WhatsApp us to confirm your preferred pickup slot.
-            Orders are ready within 24 hours. Bring your order reference number when collecting.
-            For same-day pickup, orders must be placed before <strong>10am SGT</strong>.
-          </p>
+          <div>
+            <p style={{ margin: '0 0 8px' }}>
+              <strong>How pickup works:</strong> Place your order online, and below is the next availability date for pickup.
+            </p>
+            {(() => {
+              const deliveryMsg = siteConfig?.banner_messages
+                ?.split('|')
+                .map(m => m.trim())
+                .find(m => /delivery|pickup|available|next/i.test(m));
+              return deliveryMsg ? (
+                <p style={{ margin: 0, fontSize: 13, color: '#374151' }}>{deliveryMsg}</p>
+              ) : null;
+            })()}
+          </div>
         </div>
       </div>
     </>

@@ -2522,3 +2522,44 @@
     font-size: 12px;
   }
 }
+
+/* ── Delivery Tag badge ── */
+.delivery-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── Bulk action bar divider ── */
+.bulk-divider {
+  width: 1px;
+  height: 32px;
+  background: #bfdbfe;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .bulk-divider {
+    width: 100%;
+    height: 1px;
+    margin: 4px 0;
+  }
+
+  .delivery-tag-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .delivery-tag-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+  }
+}

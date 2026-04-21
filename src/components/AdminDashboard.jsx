@@ -441,7 +441,7 @@ function downloadCSV(filename, headers, rows) {
 
 export default function AdminDashboard({ onLogout, defaultTab }) {
   const { setAdminView } = useApp();
-  const [activeTab, setActiveTab] = useState(defaultTab || 'dashboard');
+  const [activeTab, setActiveTab] = useState(defaultTab || 'reports');
   const [manageSubTab, setManageSubTab] = useState('shipments');
   const [shipmentSubTab, setShipmentSubTab] = useState('list');
   const [dashboardData, setDashboardData] = useState(null);
@@ -509,6 +509,19 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null);
 
+  // Delivery sub-tab
+  const [deliverySubTab, setDeliverySubTab] = useState('boys');
+
+  // Delivery tags state
+  const [deliveryTags, setDeliveryTags] = useState([]);
+  const [tagForm, setTagForm] = useState({ name: '', color: '#6b7280' });
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagError, setTagError] = useState('');
+  const [tagSuccess, setTagSuccess] = useState('');
+
+  // Bulk tag assignment (Orders tab)
+  const [bulkTagId, setBulkTagId] = useState('');
+
   // Products tab state
   const [adminProducts, setAdminProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -530,7 +543,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportOrders, setReportOrders] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
-  const [reportSubTab, setReportSubTab] = useState('orders-summary');
+  const [reportSubTab, setReportSubTab] = useState('all-orders');
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
@@ -576,16 +589,19 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchUnassignedOrders();
       fetchAssignedOrders();
       fetchNullShipmentCount();
+      fetchDeliveryTags();
       if (shipments.length === 0) fetchShipments();
     }
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'orders') {
+    if (activeTab === 'reports') {
       fetchAllOrders();
       fetchAbandonedOrders();
       fetchAdminPickupLocations();
       fetchDeliveryBoys();
+      fetchDeliveryTags();
+      fetchReportOrders();
       if (shipments.length === 0) fetchShipments();
       if (adminProducts.length === 0) fetchAdminProducts();
     }
@@ -596,13 +612,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchAdminProducts();
     }
   }, [activeTab, manageSubTab]);
-
-  useEffect(() => {
-    if (activeTab === 'reports') {
-      fetchReportOrders();
-      if (shipments.length === 0) fetchShipments();
-    }
-  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'manage' && manageSubTab === 'site-messages') {
@@ -908,6 +917,68 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     }
   };
 
+  const fetchDeliveryTags = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags`, { headers });
+      if (res.ok) setDeliveryTags(await res.json());
+    } catch (_) {}
+  };
+
+  const handleCreateTag = async (e) => {
+    e.preventDefault();
+    if (!tagForm.name.trim()) return;
+    setTagLoading(true); setTagError(''); setTagSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tagForm.name.trim(), color: tagForm.color }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+      setTagSuccess('Tag created!');
+      setTagForm({ name: '', color: '#6b7280' });
+      fetchDeliveryTags();
+    } catch (err) {
+      setTagError(err.message);
+    } finally {
+      setTagLoading(false);
+    }
+  };
+
+  const handleDeleteTag = async (tagId) => {
+    if (!window.confirm('Delete this tag? It will be removed from all orders.')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags/${tagId}`, { method: 'DELETE', headers });
+      if (!res.ok && res.status !== 204) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+      fetchDeliveryTags();
+    } catch (err) {
+      showToast('error', `Delete tag failed: ${err.message}`);
+    }
+  };
+
+  const handleBulkTagAssign = async () => {
+    if (orderSelectedIds.length === 0 || bulkTagId === '') return;
+    const tagIdPayload = bulkTagId === 'clear' ? null : Number(bulkTagId);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_ids: orderSelectedIds, tag_id: tagIdPayload }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+      const data = await res.json();
+      const tagName = tagIdPayload === null ? 'cleared' : (deliveryTags.find(t => t.id === tagIdPayload)?.name || 'tag');
+      setBulkResult({ success: true, message: `Tag "${tagName}" applied to ${data.count} order(s)` });
+      showToast('success', `Tag applied to ${data.count} order(s).`);
+      setOrderSelectedIds([]);
+      setBulkTagId('');
+      fetchAllOrders();
+    } catch (err) {
+      setBulkResult({ success: false, message: err.message });
+      showToast('error', `Tag assign failed: ${err.message}`);
+    }
+  };
+
   const handleCollectPayment = async (orderId) => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/admin/orders/${orderId}/collect-payment`, {
@@ -1062,9 +1133,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       return;
     }
 
+    const manualValue = formData.get('expected_value');
+    const computedValue = varieties.reduce((sum, v) => {
+      const boxes = v.box_count || 0;
+      const weight = v.box_weight || 0;
+      const price = v.price_per_kg || 0;
+      return sum + boxes * weight * price;
+    }, 0);
+
     const payload = {
       total_boxes: totalBoxes,
-      expected_value: formData.get('expected_value') ? parseFloat(formData.get('expected_value')) : null,
+      expected_value: manualValue ? parseFloat(manualValue) : (computedValue > 0 ? computedValue : null),
       notes: formData.get('notes'),
       varieties,
     };
@@ -1234,12 +1313,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           onClick={() => setActiveTab('delivery')}
         >
           🛵 Delivery
-        </button>
-        <button
-          className={`nav-tab ${activeTab === 'orders' ? 'active' : ''}`}
-          onClick={() => setActiveTab('orders')}
-        >
-          📋 Orders
         </button>
         <button
           className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -1522,7 +1595,24 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     ? <span className="total-boxes-value">{total}</span>
                                     : <span style={{ color: '#9ca3af' }}>0</span>}
                                 </td>
+                                <td colSpan="2"></td>
                               </tr>
+                              {(() => {
+                                const est = Object.keys(varietyBoxCounts).reduce((sum, pid) => {
+                                  const boxes = parseFloat(varietyBoxCounts[pid]) || 0;
+                                  const weight = parseFloat(varietyBoxWeights[pid]) || 0;
+                                  const price = parseFloat(varietyPricesPerKg[pid]) || 0;
+                                  return sum + boxes * weight * price;
+                                }, 0);
+                                return est > 0 ? (
+                                  <tr className="variety-total-row">
+                                    <td colSpan="2"><strong>Estimated Cost (₹)</strong></td>
+                                    <td colSpan="3">
+                                      <span className="total-boxes-value">₹{est.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </td>
+                                  </tr>
+                                ) : null;
+                              })()}
                             </tfoot>
                           </table>
                         )}
@@ -1574,6 +1664,100 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
         {activeTab === 'delivery' && (
           <div className="delivery-section">
+
+            {/* ── Delivery sub-tab nav ── */}
+            <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'boys' ? ' active' : ''}`}
+                onClick={() => setDeliverySubTab('boys')}
+              >🛵 Delivery Boys</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'tags' ? ' active' : ''}`}
+                onClick={() => setDeliverySubTab('tags')}
+              >🏷️ Tags</button>
+            </div>
+
+            {/* ── Tags tab ── */}
+            {deliverySubTab === 'tags' && (
+              <div className="delivery-card">
+                <h2>🏷️ Delivery Tags</h2>
+                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
+                  Create tags to group and label orders for delivery routing.
+                </p>
+
+                {/* Create form */}
+                <form onSubmit={handleCreateTag} className="db-form" style={{ marginBottom: 24 }}>
+                  <div className="db-form-row">
+                    <input
+                      placeholder="Tag name (e.g. Zone A, Express)"
+                      value={tagForm.name}
+                      onChange={e => { setTagForm(f => ({ ...f, name: e.target.value })); setTagError(''); setTagSuccess(''); }}
+                      required
+                      style={{ flex: 1 }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 13, color: '#374151', whiteSpace: 'nowrap' }}>Colour:</label>
+                      <input
+                        type="color"
+                        value={tagForm.color}
+                        onChange={e => setTagForm(f => ({ ...f, color: e.target.value }))}
+                        style={{ width: 48, height: 36, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', padding: 2 }}
+                      />
+                    </div>
+                  </div>
+                  {tagError && <div className="db-error">{tagError}</div>}
+                  {tagSuccess && <div className="db-success">{tagSuccess}</div>}
+                  <button type="submit" className="submit-button" disabled={tagLoading}>
+                    {tagLoading ? 'Creating…' : '➕ Create Tag'}
+                  </button>
+                </form>
+
+                {/* Tag list */}
+                {deliveryTags.length === 0 ? (
+                  <p style={{ color: '#9ca3af', fontSize: 14 }}>No tags yet. Create one above.</p>
+                ) : (
+                  <table className="shipment-table" style={{ marginTop: 8 }}>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Tag</th>
+                        <th>Name</th>
+                        <th>Created</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deliveryTags.map((tag, i) => (
+                        <tr key={tag.id}>
+                          <td>{i + 1}</td>
+                          <td>
+                            <span className="delivery-tag-badge" style={{ background: tag.color + '22', color: tag.color, border: `1px solid ${tag.color}55` }}>
+                              🏷️ {tag.name}
+                            </span>
+                          </td>
+                          <td>{tag.name}</td>
+                          <td style={{ fontSize: 12, color: '#6b7280' }}>
+                            {tag.created_at ? new Date(tag.created_at).toLocaleDateString() : '—'}
+                          </td>
+                          <td>
+                            <button
+                              className="orders-clear-btn"
+                              style={{ color: '#ef4444', borderColor: '#fca5a5' }}
+                              onClick={() => handleDeleteTag(tag.id)}
+                            >
+                              🗑 Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+
+            {/* ── Delivery Boys tab ── */}
+            {deliverySubTab === 'boys' && <>
 
             {/* ── Section A: Delivery Boys ── */}
             <div className="delivery-card">
@@ -1886,10 +2070,36 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               )}
             </div>
 
+            </>}
+
           </div>
         )}
 
-        {activeTab === 'orders' && (
+        {activeTab === 'reports' && (
+          <div className="dashboard-section" style={{ paddingBottom: 0 }}>
+            <h2>📈 Reports</h2>
+            <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'all-orders' ? ' active' : ''}`}
+                onClick={() => setReportSubTab('all-orders')}
+              >📋 All Orders</button>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
+                onClick={() => setReportSubTab('orders-summary')}
+              >Orders Summary</button>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
+                onClick={() => setReportSubTab('orders-by-type')}
+              >Orders by Type</button>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'delivery-sheet' ? ' active' : ''}`}
+                onClick={() => setReportSubTab('delivery-sheet')}
+              >Delivery Sheet</button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'reports' && reportSubTab === 'all-orders' && (
           <div className="orders-section">
             {(() => {
               const now = Date.now();
@@ -2107,6 +2317,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             {orderSelectedIds.length > 0 && (
               <div className="bulk-update-bar">
                 <span className="bulk-count">{orderSelectedIds.length} selected</span>
+                {/* Status update */}
                 <select value={bulkStatus} onChange={e => setBulkStatus(e.target.value)} className="orders-filter-select">
                   <option value="">— Set Status —</option>
                   <option value="confirmed">Confirmed</option>
@@ -2125,6 +2336,29 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 <button className="submit-button" disabled={!bulkStatus} onClick={handleBulkStatusUpdate}>
                   Update {orderSelectedIds.length} Order(s)
                 </button>
+
+                {/* Tag assignment */}
+                <div className="bulk-divider" />
+                <select
+                  value={bulkTagId}
+                  onChange={e => setBulkTagId(e.target.value)}
+                  className="orders-filter-select"
+                >
+                  <option value="">— Assign Tag —</option>
+                  <option value="clear">🚫 Clear Tag</option>
+                  {deliveryTags.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <button
+                  className="submit-button"
+                  style={{ background: '#7c3aed', borderColor: '#7c3aed' }}
+                  disabled={bulkTagId === ''}
+                  onClick={handleBulkTagAssign}
+                >
+                  🏷️ Apply Tag
+                </button>
+
                 <button className="orders-clear-btn" onClick={() => setOrderSelectedIds([])}>Deselect</button>
               </div>
             )}
@@ -2159,6 +2393,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <th>Order Status</th>
                       <th>Payment</th>
                       <th>Method</th>
+                      <th>Tag</th>
                       <th>Assigned To</th>
                       <th>Del. Code</th>
                       <th>Shipment</th>
@@ -2212,6 +2447,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 </div>
                               )}
                             </td>
+                            <td>
+                              {o.delivery_tag_name
+                                ? <span className="delivery-tag-badge" style={{ background: (o.delivery_tag_color || '#6b7280') + '22', color: o.delivery_tag_color || '#6b7280', border: `1px solid ${(o.delivery_tag_color || '#6b7280')}55` }}>🏷️ {o.delivery_tag_name}</span>
+                                : <span style={{ color: '#d1d5db' }}>—</span>}
+                            </td>
                             <td style={{ fontSize: 12 }}>
                               {o.delivery_boy_name
                                 ? <span className="assigned-badge">{o.delivery_boy_name}</span>
@@ -2236,7 +2476,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
                           {isExpanded && (
                             <tr className="order-detail-row">
-                              <td colSpan={15}>
+                              <td colSpan={16}>
                                 <div className="order-detail-panel">
                                   <div className="order-detail-grid">
                                     <div className="order-detail-block">
@@ -2555,7 +2795,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
-        {activeTab === 'reports' && (() => {
+        {activeTab === 'reports' && reportSubTab !== 'all-orders' && (() => {
           const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
           const STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled' };
 
@@ -2585,24 +2825,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
           return (
             <div className="dashboard-section">
-              <h2>📈 Reports</h2>
-
-              {/* Sub-tab nav */}
-              <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
-                <button
-                  className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
-                  onClick={() => setReportSubTab('orders-summary')}
-                >Orders Summary</button>
-                <button
-                  className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
-                  onClick={() => setReportSubTab('orders-by-type')}
-                >Orders by Type</button>
-                <button
-                  className={`manage-sub-tab${reportSubTab === 'delivery-sheet' ? ' active' : ''}`}
-                  onClick={() => setReportSubTab('delivery-sheet')}
-                >Delivery Sheet</button>
-              </div>
-
               {reportLoading ? (
                 <div className="loading">⏳ Loading report data…</div>
               ) : (
@@ -2708,12 +2930,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                            (o.delivery_type === 'delivery' ? o.delivery_address : true)
                     );
 
-                    // Collect all unique item variants
+                    // Collect all unique item variants (strip " - Standard" suffix for display)
+                    const stripStd = name => name ? name.replace(/\s*-\s*Standard$/i, '') : name;
                     const allVariants = [];
                     deliveryOrders.forEach(o => {
                       (o.items || []).forEach(it => {
-                        if (it.variant && !allVariants.includes(it.variant)) {
-                          allVariants.push(it.variant);
+                        const v = stripStd(it.variant);
+                        if (v && !allVariants.includes(v)) {
+                          allVariants.push(v);
                         }
                       });
                     });
@@ -2729,8 +2953,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
                       if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type };
                       (o.items || []).forEach(it => {
-                        if (it.variant) {
-                          addressMap[addr][it.variant] = (addressMap[addr][it.variant] || 0) + (it.qty || 0);
+                        const v = stripStd(it.variant);
+                        if (v) {
+                          addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
                         }
                       });
                     });

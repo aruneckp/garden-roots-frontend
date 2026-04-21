@@ -22,7 +22,7 @@ export function AppProvider({ children }) {
   // ── Admin view mode: 'store' | 'admin' | 'delivery' ───────────────────────
   // Admins default to customer store so they can book on behalf of customers
   const [adminView, setAdminView] = useState('store');
-  const [adminInitialTab, setAdminInitialTab] = useState('dashboard');
+  const [adminInitialTab, setAdminInitialTab] = useState('reports');
 
   // Restore session from localStorage on mount
   useEffect(() => {

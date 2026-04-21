@@ -17,6 +17,7 @@ const EMPTY_FORM = {
 
 export default function PickupLocationManager() {
   const [locations, setLocations] = useState([]);
+  const [expandedIds, setExpandedIds] = useState(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -40,6 +41,14 @@ export default function PickupLocationManager() {
   useEffect(() => {
     fetchLocations();
   }, []);
+
+  const toggleExpand = (id) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const fetchLocations = async () => {
     setLoading(true);
@@ -250,62 +259,76 @@ export default function PickupLocationManager() {
         {locations.length === 0 ? (
           <p>No pickup locations found. Create one to get started!</p>
         ) : (
-          locations.map(location => (
-            <div key={location.id} className="location-card">
-              <div className="location-header-card">
-                <h3>
-                  {location.location_type === 'retail' && '🏪'}
-                  {location.location_type === 'warehouse' && '🏭'}
-                  {location.location_type === 'franchise' && '🏢'}
-                  {' '}{location.name}
-                </h3>
-                <span className="location-type-badge">{location.location_type}</span>
-              </div>
-
-              <div className="location-details">
-                <p><strong>📍 Address:</strong> {location.address}</p>
-                <p><strong>📱 Phone:</strong> {location.phone || 'N/A'}</p>
-                <p><strong>💬 WhatsApp:</strong> {location.whatsapp_phone || 'N/A'}</p>
-                <p><strong>📧 Email:</strong> {location.email || 'N/A'}</p>
-                <p><strong>👤 Manager:</strong> {location.manager_name || 'N/A'}</p>
-                <p><strong>🕐 Collection Hours:</strong> {location.collection_hours || 'N/A'}</p>
-
-                <div className="capacity-bar">
-                  <p><strong>Capacity: {location.capacity} boxes</strong></p>
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${(location.current_boxes / location.capacity * 100) || 0}%` }}
-                    />
+          locations.map(location => {
+            const isOpen = expandedIds.has(location.id);
+            return (
+              <div key={location.id} className="location-card">
+                <div
+                  className="location-header-card"
+                  onClick={() => toggleExpand(location.id)}
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                >
+                  <h3 style={{ margin: 0 }}>
+                    {location.location_type === 'retail' && '🏪'}
+                    {location.location_type === 'warehouse' && '🏭'}
+                    {location.location_type === 'franchise' && '🏢'}
+                    {' '}{location.name}
+                  </h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="location-type-badge">{location.location_type}</span>
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</span>
                   </div>
-                  <p className="capacity-text">Currently: {location.current_boxes} boxes ({Math.round((location.current_boxes / location.capacity * 100) || 0)}%)</p>
                 </div>
 
-                {location.notes && <p><strong>📝 Notes:</strong> {location.notes}</p>}
-              </div>
+                {isOpen && (
+                  <>
+                    <div className="location-details">
+                      <p><strong>📍 Address:</strong> {location.address}</p>
+                      <p><strong>📱 Phone:</strong> {location.phone || 'N/A'}</p>
+                      <p><strong>💬 WhatsApp:</strong> {location.whatsapp_phone || 'N/A'}</p>
+                      <p><strong>📧 Email:</strong> {location.email || 'N/A'}</p>
+                      <p><strong>👤 Manager:</strong> {location.manager_name || 'N/A'}</p>
+                      <p><strong>🕐 Collection Hours:</strong> {location.collection_hours || 'N/A'}</p>
 
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                <button className="view-details-button" onClick={() => getOccupancy(location.id)}>
-                  📊 View Occupancy
-                </button>
-                <button
-                  className="view-details-button"
-                  style={{ background: '#f0f9ff', color: '#0369a1', borderColor: '#bae6fd' }}
-                  onClick={() => openEditForm(location)}
-                >
-                  ✏️ Edit
-                </button>
-                <button
-                  className="view-details-button"
-                  style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
-                  onClick={() => handleDelete(location.id, location.name)}
-                  disabled={deletingId === location.id}
-                >
-                  {deletingId === location.id ? '...' : '🗑 Delete'}
-                </button>
+                      <div className="capacity-bar">
+                        <p><strong>Capacity: {location.capacity} boxes</strong></p>
+                        <div className="progress-bar">
+                          <div
+                            className="progress-fill"
+                            style={{ width: `${(location.current_boxes / location.capacity * 100) || 0}%` }}
+                          />
+                        </div>
+                        <p className="capacity-text">Currently: {location.current_boxes} boxes ({Math.round((location.current_boxes / location.capacity * 100) || 0)}%)</p>
+                      </div>
+
+                      {location.notes && <p><strong>📝 Notes:</strong> {location.notes}</p>}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button className="view-details-button" onClick={() => getOccupancy(location.id)}>
+                        📊 View Occupancy
+                      </button>
+                      <button
+                        className="view-details-button"
+                        style={{ background: '#f0f9ff', color: '#0369a1', borderColor: '#bae6fd' }}
+                        onClick={() => openEditForm(location)}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        className="view-details-button"
+                        style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
+                        onClick={() => handleDelete(location.id, location.name)}
+                        disabled={deletingId === location.id}
+                      >
+                        {deletingId === location.id ? '...' : '🗑 Delete'}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
