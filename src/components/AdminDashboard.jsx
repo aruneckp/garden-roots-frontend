@@ -3047,7 +3047,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     );
 
                     // Collect all unique item variants (strip " - Standard" suffix for display)
-                    const stripStd = name => name ? name.replace(/\s*-\s*Standard$/i, '') : name;
+                    const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
                     const allVariants = [];
                     deliveryOrders.forEach(o => {
                       (o.items || []).forEach(it => {
