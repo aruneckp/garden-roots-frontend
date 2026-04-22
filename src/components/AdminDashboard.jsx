@@ -3128,7 +3128,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </thead>
                             <tbody>
                               {deliveryRows.map(r => (
-                                <tr key={r.addr}>
+                                <tr key={r.addr} style={r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined}>
                                   <td
                                     className="report-loc-name"
                                     style={{ fontSize: 12, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}
