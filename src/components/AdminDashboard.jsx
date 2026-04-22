@@ -439,6 +439,21 @@ function downloadCSV(filename, headers, rows) {
   URL.revokeObjectURL(url);
 }
 
+const TAG_PALETTE = [
+  '#e11d48', // rose
+  '#2563eb', // blue
+  '#16a34a', // green
+  '#d97706', // amber
+  '#7c3aed', // violet
+  '#0891b2', // cyan
+  '#ea580c', // orange
+  '#be185d', // pink
+  '#15803d', // emerald
+  '#1d4ed8', // indigo
+  '#b45309', // yellow-brown
+  '#0f766e', // teal
+];
+
 export default function AdminDashboard({ onLogout, defaultTab }) {
   const { setAdminView } = useApp();
   const [activeTab, setActiveTab] = useState(defaultTab || 'reports');
@@ -549,6 +564,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [orderColVisibility, setOrderColVisibility] = useState({ tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false });
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
+  const [dsSelectedAddrs, setDsSelectedAddrs] = useState(new Set());
+  const [dsBulkStatus, setDsBulkStatus] = useState('');
+  const [dsBulkNote, setDsBulkNote] = useState('');
+  const [dsAddressFilter, setDsAddressFilter] = useState(null);
+  const [dsOrderSelectedIds, setDsOrderSelectedIds] = useState([]);
+  const [dsOrderBulkStatus, setDsOrderBulkStatus] = useState('');
+  const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
 
   // Global toast — shared across all actions
@@ -1740,7 +1762,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         <tr key={tag.id}>
                           <td>{i + 1}</td>
                           <td>
-                            <span className="delivery-tag-badge" style={{ background: tag.color + '22', color: tag.color, border: `1px solid ${tag.color}55` }}>
+                            <span className="delivery-tag-badge" style={{ background: TAG_PALETTE[i % TAG_PALETTE.length] + '22', color: TAG_PALETTE[i % TAG_PALETTE.length], border: `1px solid ${TAG_PALETTE[i % TAG_PALETTE.length]}55` }}>
                               🏷️ {tag.name}
                             </span>
                           </td>
@@ -2115,7 +2137,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
                   : o.delivery_address.trim();
                 const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
-                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '', _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '' };
+                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '', _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null };
                 (o.items || []).forEach(it => {
                   const v = stripStd(it.variant);
                   if (v) addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
@@ -2153,11 +2175,45 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 }
               };
 
+              const tagPaletteColor = tagId => {
+                const idx = deliveryTags.findIndex(t => t.id === tagId);
+                return idx >= 0 ? TAG_PALETTE[idx % TAG_PALETTE.length] : '#6b7280';
+              };
+
+              const handleDsBulkStatus = async () => {
+                if (!dsBulkStatus || dsSelectedAddrs.size === 0) return;
+                const orderIds = deliveryOrders
+                  .filter(o => {
+                    const a = o.delivery_type === 'pickup'
+                      ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                      : o.delivery_address.trim();
+                    return dsSelectedAddrs.has(a);
+                  })
+                  .map(o => o.id);
+                if (!orderIds.length) return;
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: orderIds, new_status: dsBulkStatus, note: dsBulkNote || null }),
+                  });
+                  if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
+                  const data = await res.json();
+                  showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                  setDsSelectedAddrs(new Set());
+                  setDsBulkStatus('');
+                  setDsBulkNote('');
+                  fetchReportOrders();
+                } catch (err) {
+                  showToast('error', `Bulk update failed: ${err.message}`);
+                }
+              };
+
               const deliveryRows = sortByCol(
                 addresses.map(addr => {
                   const row = addressMap[addr];
                   const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
-                  return { addr, tagName: row._tag_name, tagColor: row._tag_color, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
+                  return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
                 }),
                 deliverySort.col, deliverySort.dir
               );
@@ -2168,22 +2224,169 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 <div className="dashboard-section">
                   {/* Shipment + tag filter bar */}
                   <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                    <select value={reportTagFilter} onChange={e => setReportTagFilter(e.target.value)} className="orders-filter-select" style={{ fontSize: 12 }}>
+                    <select value={reportTagFilter} onChange={e => { setReportTagFilter(e.target.value); setDsAddressFilter(null); }} className="orders-filter-select" style={{ fontSize: 12 }}>
                       <option value="">All Tags</option>
                       <option value="untagged">🚫 Untagged</option>
                       {deliveryTags.map(t => <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>)}
                     </select>
                     <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
-                    <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => setSelectedReportShipment('all')}>All Shipments</button>
+                    <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => { setSelectedReportShipment('all'); setDsAddressFilter(null); }}>All Shipments</button>
                     {shipmentsWithOrders.map(s => (
-                      <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => setSelectedReportShipment(s.id)}>{s.shipment_ref}</button>
+                      <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => { setSelectedReportShipment(s.id); setDsAddressFilter(null); }}>{s.shipment_ref}</button>
                     ))}
                   </div>
 
-                  {addresses.length === 0 ? (
+                  {/* ── Address drill-down ── */}
+                  {dsAddressFilter && (() => {
+                    const addrOrders = deliveryOrders.filter(o => {
+                      const a = o.delivery_type === 'pickup'
+                        ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                        : o.delivery_address.trim();
+                      return a === dsAddressFilter;
+                    });
+                    return (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                          <button className="cancel-button" onClick={() => { setDsAddressFilter(null); setDsOrderSelectedIds([]); setDsOrderBulkStatus(''); setDsOrderBulkNote(''); }} style={{ fontSize: 13 }}>← Back</button>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>{dsAddressFilter}</span>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>({addrOrders.length} order{addrOrders.length !== 1 ? 's' : ''})</span>
+                        </div>
+                        {dsOrderSelectedIds.length > 0 && (
+                          <div className="bulk-update-bar" style={{ marginBottom: 10 }}>
+                            <span className="bulk-count">{dsOrderSelectedIds.length} selected</span>
+                            <select value={dsOrderBulkStatus} onChange={e => setDsOrderBulkStatus(e.target.value)} className="orders-filter-select">
+                              <option value="">— Set Status —</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
+                              <option value="pending">Pending</option>
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="Note (optional)"
+                              value={dsOrderBulkNote}
+                              onChange={e => setDsOrderBulkNote(e.target.value)}
+                              className="bulk-note-input"
+                            />
+                            <button
+                              className="submit-button"
+                              disabled={!dsOrderBulkStatus}
+                              onClick={async () => {
+                                if (!dsOrderBulkStatus) return;
+                                try {
+                                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                                    method: 'PUT',
+                                    headers: { ...headers, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ order_ids: dsOrderSelectedIds, new_status: dsOrderBulkStatus, note: dsOrderBulkNote || null }),
+                                  });
+                                  if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
+                                  const data = await res.json();
+                                  showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                                  setDsOrderSelectedIds([]);
+                                  setDsOrderBulkStatus('');
+                                  setDsOrderBulkNote('');
+                                  fetchReportOrders();
+                                } catch (err) {
+                                  showToast('error', `Bulk update failed: ${err.message}`);
+                                }
+                              }}
+                            >
+                              Update {dsOrderSelectedIds.length} Order(s)
+                            </button>
+                            <button className="cancel-button" onClick={() => { setDsOrderSelectedIds([]); setDsOrderBulkStatus(''); setDsOrderBulkNote(''); }} style={{ marginLeft: 4 }}>
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                        <div className="report-table-wrap">
+                          <table className="report-location-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: 36, textAlign: 'center', padding: '4px 6px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={addrOrders.length > 0 && addrOrders.every(o => dsOrderSelectedIds.includes(o.id))}
+                                    onChange={e => setDsOrderSelectedIds(e.target.checked ? addrOrders.map(o => o.id) : [])}
+                                    title="Select all"
+                                  />
+                                </th>
+                                <th>Order Ref</th>
+                                <th>Customer</th>
+                                <th>Phone</th>
+                                <th>Items</th>
+                                <th>Total</th>
+                                <th>Status</th>
+                                <th>Payment</th>
+                                <th>Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {addrOrders.map(o => {
+                                const checked = dsOrderSelectedIds.includes(o.id);
+                                return (
+                                  <tr key={o.id} style={checked ? { background: '#f0fdf4' } : undefined}>
+                                    <td style={{ textAlign: 'center', padding: '4px 6px' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={e => setDsOrderSelectedIds(prev =>
+                                          e.target.checked ? [...prev, o.id] : prev.filter(id => id !== o.id)
+                                        )}
+                                      />
+                                    </td>
+                                    <td style={{ fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap' }}>{o.order_ref}</td>
+                                    <td style={{ fontSize: 12 }}>{o.customer_name}</td>
+                                    <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
+                                    <td style={{ fontSize: 12 }}>
+                                      {(o.items || []).map((it, i) => (
+                                        <div key={i}>{it.name || it.variant} × {it.qty}</div>
+                                      ))}
+                                    </td>
+                                    <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>${Number(o.total_price || 0).toFixed(2)}</td>
+                                    <td><span className={`status-badge status-${o.order_status}`}>{o.order_status}</span></td>
+                                    <td><span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>{o.payment_status}</span></td>
+                                    <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {!dsAddressFilter && addresses.length === 0 ? (
                     <p style={{ color: '#9ca3af', marginTop: 16 }}>No delivery orders found for this selection.</p>
-                  ) : (
+                  ) : !dsAddressFilter && (
                     <>
+                      {dsSelectedAddrs.size > 0 && (
+                        <div className="bulk-update-bar" style={{ marginBottom: 10 }}>
+                          <span className="bulk-count">{dsSelectedAddrs.size} row{dsSelectedAddrs.size > 1 ? 's' : ''} selected</span>
+                          <select value={dsBulkStatus} onChange={e => setDsBulkStatus(e.target.value)} className="orders-filter-select">
+                            <option value="">— Set Status —</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="shipped">Shipped</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                            <option value="pending">Pending</option>
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Note (optional)"
+                            value={dsBulkNote}
+                            onChange={e => setDsBulkNote(e.target.value)}
+                            className="bulk-note-input"
+                          />
+                          <button className="submit-button" disabled={!dsBulkStatus} onClick={handleDsBulkStatus}>
+                            Update Orders
+                          </button>
+                          <button className="cancel-button" onClick={() => { setDsSelectedAddrs(new Set()); setDsBulkStatus(''); setDsBulkNote(''); }} style={{ marginLeft: 4 }}>
+                            Clear
+                          </button>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
                           const hdrs = ['Tag', 'Address / Collection Point', 'Postal', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
@@ -2196,6 +2399,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         <table className="report-location-table">
                           <thead>
                             <tr>
+                              <th style={{ width: 36, textAlign: 'center', padding: '4px 6px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={deliveryRows.length > 0 && deliveryRows.every(r => dsSelectedAddrs.has(r.addr))}
+                                  onChange={e => {
+                                    if (e.target.checked) setDsSelectedAddrs(new Set(deliveryRows.map(r => r.addr)));
+                                    else setDsSelectedAddrs(new Set());
+                                  }}
+                                  title="Select all"
+                                />
+                              </th>
                               <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />
                               <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
                               <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
@@ -2208,14 +2422,33 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {deliveryRows.map(r => (
-                              <tr key={r.addr} style={r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined}>
+                            {deliveryRows.map(r => {
+                              const _rc = r.tagId ? tagPaletteColor(r.tagId) : null;
+                              const rowStyle = _rc
+                                ? { background: _rc + '18', borderLeft: `3px solid ${_rc}88` }
+                                : (r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined);
+                              return (
+                              <tr key={r.addr} style={rowStyle}>
+                                <td style={{ textAlign: 'center', padding: '4px 6px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={dsSelectedAddrs.has(r.addr)}
+                                    onChange={e => {
+                                      setDsSelectedAddrs(prev => {
+                                        const next = new Set(prev);
+                                        if (e.target.checked) next.add(r.addr);
+                                        else next.delete(r.addr);
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                </td>
                                 <td style={{ whiteSpace: 'nowrap' }}>
                                   {r.tagName
-                                    ? <span className="delivery-tag-badge" style={{ background: (r.tagColor || '#6b7280') + '22', color: r.tagColor || '#6b7280', border: `1px solid ${(r.tagColor || '#6b7280')}55` }}>🏷️ {r.tagName}</span>
+                                    ? <span className="delivery-tag-badge" style={{ background: tagPaletteColor(r.tagId) + '22', color: tagPaletteColor(r.tagId), border: `1px solid ${tagPaletteColor(r.tagId)}55` }}>🏷️ {r.tagName}</span>
                                     : <span style={{ color: '#d1d5db' }}>—</span>}
                                 </td>
-                                <td className="report-loc-name" style={{ fontSize: 12 }}>{r.addr}</td>
+                                <td className="report-loc-name" style={{ fontSize: 12, cursor: 'pointer', color: '#2563eb', textDecoration: 'underline dotted' }} onClick={() => setDsAddressFilter(r.addr)} title="View all orders for this address">{r.addr}</td>
                                 <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.postal || '—'}</td>
                                 <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                                   <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7', color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d' }}>{r.type}</span>
@@ -2233,11 +2466,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                   </select>
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
-                              <td colSpan={6}><strong>Total</strong></td>
+                              <td colSpan={7}><strong>Total</strong></td>
                               {allVariants.map(v => {
                                 const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
@@ -2731,7 +2965,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             {orderColVisibility.tag && (
                               <td>
                                 {o.delivery_tag_name
-                                  ? <span className="delivery-tag-badge" style={{ background: (o.delivery_tag_color || '#6b7280') + '22', color: o.delivery_tag_color || '#6b7280', border: `1px solid ${(o.delivery_tag_color || '#6b7280')}55` }}>🏷️ {o.delivery_tag_name}</span>
+                                  ? (() => { const _ti = deliveryTags.findIndex(t => t.id === o.delivery_tag_id); const _tc = _ti >= 0 ? TAG_PALETTE[_ti % TAG_PALETTE.length] : '#6b7280'; return <span className="delivery-tag-badge" style={{ background: _tc + '22', color: _tc, border: `1px solid ${_tc}55` }}>🏷️ {o.delivery_tag_name}</span>; })()
                                   : <span style={{ color: '#d1d5db' }}>—</span>}
                               </td>
                             )}
