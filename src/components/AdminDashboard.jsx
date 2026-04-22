@@ -462,7 +462,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [orderFilters, setOrderFilters] = useState({
     delivery_type: '', payment_status: '', order_status: '',
     pickup_location_id: '', delivery_boy_id: '', assigned: '',
-    payment_method: '', date_from: '', date_to: '',
+    payment_method: '', date_from: '', date_to: '', tag_id: '',
   });
   const [activeFilters, setActiveFilters] = useState({
     delivery_type: false,
@@ -543,6 +543,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportOrders, setReportOrders] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
+  const [reportTagFilter, setReportTagFilter] = useState('');
   const [reportSubTab, setReportSubTab] = useState('all-orders');
   const [addressFilter, setAddressFilter] = useState('');
   const [orderColVisibility, setOrderColVisibility] = useState({ tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false });
@@ -593,6 +594,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchNullShipmentCount();
       fetchDeliveryTags();
       if (shipments.length === 0) fetchShipments();
+      fetchReportOrders();
     }
   }, [activeTab]);
 
@@ -831,6 +833,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       if (filters.payment_method) params.set('payment_method', filters.payment_method);
       if (filters.date_from) params.set('date_from', filters.date_from);
       if (filters.date_to) params.set('date_to', filters.date_to);
+      if (filters.tag_id) params.set('tag_id', filters.tag_id);
       const res = await fetch(`${API_BASE}/api/v1/admin/orders?${params}`, { headers });
       if (res.ok) setAllOrders(await res.json());
     } catch (_) {}
@@ -1677,6 +1680,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${deliverySubTab === 'tags' ? ' active' : ''}`}
                 onClick={() => setDeliverySubTab('tags')}
               >🏷️ Tags</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'delivery-sheet' ? ' active' : ''}`}
+                onClick={() => setDeliverySubTab('delivery-sheet')}
+              >📋 Delivery Sheet</button>
             </div>
 
             {/* ── Tags tab ── */}
@@ -2074,6 +2081,179 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
             </>}
 
+            {/* ── Delivery Sheet sub-tab ── */}
+            {deliverySubTab === 'delivery-sheet' && (() => {
+              const dsFiltered = reportOrders
+                .filter(o => selectedReportShipment === 'all' || o.shipment_id === selectedReportShipment)
+                .filter(o => {
+                  if (!reportTagFilter) return true;
+                  if (reportTagFilter === 'untagged') return !o.delivery_tag_id;
+                  return String(o.delivery_tag_id) === reportTagFilter;
+                });
+
+              const deliveryOrders = dsFiltered.filter(
+                o => o.order_status !== 'cancelled' &&
+                     o.order_status !== 'pending' &&
+                     (o.delivery_type === 'delivery' ? o.delivery_address : true)
+              );
+
+              const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
+              const allVariants = [];
+              deliveryOrders.forEach(o => {
+                (o.items || []).forEach(it => {
+                  const v = stripStd(it.variant);
+                  if (v && !allVariants.includes(v)) allVariants.push(v);
+                });
+              });
+              allVariants.sort();
+
+              const extractPostal = addr => { const m = addr && addr.match(/\b(\d{5,6})\s*$/); return m ? m[1] : ''; };
+
+              const addressMap = {};
+              deliveryOrders.forEach(o => {
+                const addr = o.delivery_type === 'pickup'
+                  ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                  : o.delivery_address.trim();
+                const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
+                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '', _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '' };
+                (o.items || []).forEach(it => {
+                  const v = stripStd(it.variant);
+                  if (v) addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
+                });
+              });
+              const addresses = Object.keys(addressMap).sort();
+
+              const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
+              const toggleDeliverySort = col => setDeliverySort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+
+              const applyTagToAddress = async (addr, tagId) => {
+                const orderIds = deliveryOrders
+                  .filter(o => {
+                    const a = o.delivery_type === 'pickup'
+                      ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                      : o.delivery_address.trim();
+                    return a === addr;
+                  })
+                  .map(o => o.id);
+                if (!orderIds.length) return;
+                const tagIdPayload = tagId === 'clear' ? null : Number(tagId);
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: orderIds, tag_id: tagIdPayload }),
+                  });
+                  if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+                  const data = await res.json();
+                  const tagName = tagIdPayload === null ? 'cleared' : (deliveryTags.find(t => t.id === tagIdPayload)?.name || 'tag');
+                  showToast('success', `Tag "${tagName}" applied to ${data.count} order(s) for this address`);
+                  fetchReportOrders();
+                } catch (err) {
+                  showToast('error', `Tag assign failed: ${err.message}`);
+                }
+              };
+
+              const deliveryRows = sortByCol(
+                addresses.map(addr => {
+                  const row = addressMap[addr];
+                  const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
+                  return { addr, tagName: row._tag_name, tagColor: row._tag_color, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
+                }),
+                deliverySort.col, deliverySort.dir
+              );
+
+              const shipmentsWithOrders = shipments.filter(s => reportOrders.some(o => o.shipment_id === s.id));
+
+              return (
+                <div className="dashboard-section">
+                  {/* Shipment + tag filter bar */}
+                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                    <select value={reportTagFilter} onChange={e => setReportTagFilter(e.target.value)} className="orders-filter-select" style={{ fontSize: 12 }}>
+                      <option value="">All Tags</option>
+                      <option value="untagged">🚫 Untagged</option>
+                      {deliveryTags.map(t => <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>)}
+                    </select>
+                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
+                    <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => setSelectedReportShipment('all')}>All Shipments</button>
+                    {shipmentsWithOrders.map(s => (
+                      <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => setSelectedReportShipment(s.id)}>{s.shipment_ref}</button>
+                    ))}
+                  </div>
+
+                  {addresses.length === 0 ? (
+                    <p style={{ color: '#9ca3af', marginTop: 16 }}>No delivery orders found for this selection.</p>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                        <button className="report-download-btn" onClick={() => {
+                          const hdrs = ['Tag', 'Address / Collection Point', 'Postal', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
+                          const rows = deliveryRows.map(r => [r.tagName || '', r.addr, r.postal || '', r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
+                          rows.push(['', 'TOTAL', '', '', '', '', ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
+                          downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
+                        }}>⬇ Download CSV</button>
+                      </div>
+                      <div className="report-table-wrap">
+                        <table className="report-location-table">
+                          <thead>
+                            <tr>
+                              <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />
+                              <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
+                              <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
+                              <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
+                              <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
+                              <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
+                              {allVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
+                              <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
+                              <th style={{ whiteSpace: 'nowrap' }}>Apply Tag</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {deliveryRows.map(r => (
+                              <tr key={r.addr} style={r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined}>
+                                <td style={{ whiteSpace: 'nowrap' }}>
+                                  {r.tagName
+                                    ? <span className="delivery-tag-badge" style={{ background: (r.tagColor || '#6b7280') + '22', color: r.tagColor || '#6b7280', border: `1px solid ${(r.tagColor || '#6b7280')}55` }}>🏷️ {r.tagName}</span>
+                                    : <span style={{ color: '#d1d5db' }}>—</span>}
+                                </td>
+                                <td className="report-loc-name" style={{ fontSize: 12 }}>{r.addr}</td>
+                                <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.postal || '—'}</td>
+                                <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                                  <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7', color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d' }}>{r.type}</span>
+                                </td>
+                                <td style={{ fontSize: 12 }}>{r.name}</td>
+                                <td style={{ fontSize: 12 }}>{r.phone}</td>
+                                {allVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
+                                <td className="report-row-total">{r.total}</td>
+                                <td style={{ whiteSpace: 'nowrap' }}>
+                                  <select defaultValue="" className="orders-filter-select" style={{ fontSize: 11, padding: '2px 4px' }}
+                                    onChange={e => { if (e.target.value) { applyTagToAddress(r.addr, e.target.value); e.target.value = ''; } }}>
+                                    <option value="">🏷️ Tag…</option>
+                                    <option value="clear">🚫 Clear Tag</option>
+                                    {deliveryTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                  </select>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="report-totals-row">
+                              <td colSpan={6}><strong>Total</strong></td>
+                              {allVariants.map(v => {
+                                const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
+                                return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
+                              })}
+                              <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
           </div>
         )}
 
@@ -2093,10 +2273,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
                 onClick={() => setReportSubTab('orders-by-type')}
               >Orders by Type</button>
-              <button
-                className={`manage-sub-tab${reportSubTab === 'delivery-sheet' ? ' active' : ''}`}
-                onClick={() => setReportSubTab('delivery-sheet')}
-              >Delivery Sheet</button>
             </div>
           </div>
         )}
@@ -2302,6 +2478,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <option value="no">Unassigned</option>
                 </select>
 
+                <select value={orderFilters.tag_id} onChange={e => handleOrderFilterChange('tag_id', e.target.value)} className="orders-filter-select">
+                  <option value="">All Tags</option>
+                  <option value="untagged">🚫 Untagged</option>
+                  {deliveryTags.map(t => (
+                    <option key={t.id} value={t.id}>🏷️ {t.name}</option>
+                  ))}
+                </select>
+
                 <div className="orders-date-range">
                   <input type="date" value={orderFilters.date_from} onChange={e => handleOrderFilterChange('date_from', e.target.value)} className="orders-date-input" title="From date" />
                   <span className="date-range-sep">→</span>
@@ -2314,7 +2498,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     const cleared = {
                       delivery_type: '', payment_status: '', order_status: '',
                       pickup_location_id: '', delivery_boy_id: '', assigned: '',
-                      payment_method: '', date_from: '', date_to: '',
+                      payment_method: '', date_from: '', date_to: '', tag_id: '',
                     };
                     setOrderFilters(cleared);
                     setActiveFilters({ delivery_type: false, payment_status: false, order_status: false, pickup_location_id: false, payment_method: false });
@@ -2915,9 +3099,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
           const STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled' };
 
-          const filteredByShipment = selectedReportShipment === 'all'
-            ? reportOrders
-            : reportOrders.filter(o => o.shipment_id === selectedReportShipment);
+          const filteredByShipment = reportOrders
+            .filter(o => selectedReportShipment === 'all' || o.shipment_id === selectedReportShipment)
+            .filter(o => {
+              if (!reportTagFilter) return true;
+              if (reportTagFilter === 'untagged') return !o.delivery_tag_id;
+              return String(o.delivery_tag_id) === reportTagFilter;
+            });
 
           const validOrders = filteredByShipment.filter(o => o.order_status !== 'cancelled' && o.order_status !== 'pending');
           const totalBoxes = validOrders.reduce((sum, o) => sum + (o.items || []).reduce((s, it) => s + (it.qty || 0), 0), 0);
@@ -2952,7 +3140,20 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     <span className="report-total-note">(excludes Cancelled &amp; Pending orders)</span>
                   </div>
 
-                  <div className="report-shipment-filter-bar">
+                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <select
+                      value={reportTagFilter}
+                      onChange={e => setReportTagFilter(e.target.value)}
+                      className="orders-filter-select"
+                      style={{ fontSize: 12 }}
+                    >
+                      <option value="">All Tags</option>
+                      <option value="untagged">🚫 Untagged</option>
+                      {deliveryTags.map(t => (
+                        <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>
+                      ))}
+                    </select>
+                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
                     <button
                       className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`}
                       onClick={() => setSelectedReportShipment('all')}
@@ -3034,145 +3235,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tfoot>
                         </table>
                       </div>
-                      </>
-                    );
-                  })()}
-
-                  {/* ── Delivery Sheet tab ── */}
-                  {reportSubTab === 'delivery-sheet' && (() => {
-                    const deliveryOrders = filteredByShipment.filter(
-                      o => o.order_status !== 'cancelled' &&
-                           o.order_status !== 'pending' &&
-                           (o.delivery_type === 'delivery' ? o.delivery_address : true)
-                    );
-
-                    // Collect all unique item variants (strip " - Standard" suffix for display)
-                    const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
-                    const allVariants = [];
-                    deliveryOrders.forEach(o => {
-                      (o.items || []).forEach(it => {
-                        const v = stripStd(it.variant);
-                        if (v && !allVariants.includes(v)) {
-                          allVariants.push(v);
-                        }
-                      });
-                    });
-                    allVariants.sort();
-
-                    const extractPostal = addr => { const m = addr && addr.match(/\b(\d{5,6})\s*$/); return m ? m[1] : ''; };
-
-                    // Build address → variant → qty map
-                    // Delivery orders use delivery_address; pickup orders use the pickup location's physical address
-                    const addressMap = {};
-                    deliveryOrders.forEach(o => {
-                      const addr = o.delivery_type === 'pickup'
-                        ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
-                        : o.delivery_address.trim();
-                      const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
-                      if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '' };
-                      (o.items || []).forEach(it => {
-                        const v = stripStd(it.variant);
-                        if (v) {
-                          addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
-                        }
-                      });
-                    });
-                    const addresses = Object.keys(addressMap).sort();
-
-                    if (addresses.length === 0) {
-                      return <p style={{ color: '#9ca3af', marginTop: 16 }}>No delivery orders found for this selection.</p>;
-                    }
-
-                    const shipLabel = selectedReportShipment === 'all' ? 'all-shipments' : `shipment-${selectedReportShipment}`;
-                    const toggleDeliverySort = col => setDeliverySort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
-                    const deliveryRows = sortByCol(
-                      addresses.map(addr => {
-                        const row = addressMap[addr];
-                        const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
-                        return { addr, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
-                      }),
-                      deliverySort.col, deliverySort.dir
-                    );
-
-                    return (
-                      <>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-                          <button
-                            className="report-download-btn"
-                            onClick={() => {
-                              const headers = ['Address / Collection Point', 'Postal', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
-                              const rows = deliveryRows.map(r => [r.addr, r.postal || '', r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
-                              const totalsRow = [
-                                'TOTAL', '', '', '', '',
-                                ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)),
-                                addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0),
-                              ];
-                              rows.push(totalsRow);
-                              downloadCSV(`delivery-sheet-${shipLabel}.csv`, headers, rows);
-                            }}
-                          >
-                            ⬇ Download CSV
-                          </button>
-                        </div>
-                        <div className="report-table-wrap">
-                          <table className="report-location-table">
-                            <thead>
-                              <tr>
-                                <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
-                                <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
-                                <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
-                                <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
-                                <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
-                                {allVariants.map(v => (
-                                  <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />
-                                ))}
-                                <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {deliveryRows.map(r => (
-                                <tr key={r.addr} style={r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined}>
-                                  <td
-                                    className="report-loc-name"
-                                    style={{ fontSize: 12, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}
-                                    title="Click to view all orders for this address"
-                                    onClick={() => { setAddressFilter(r.addr); setReportSubTab('all-orders'); setOrdersSubTab('all'); }}
-                                  >{r.addr}</td>
-                                  <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>
-                                    {r.postal || '—'}
-                                  </td>
-                                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                                    <span style={{
-                                      padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                                      background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7',
-                                      color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d',
-                                    }}>{r.type}</span>
-                                  </td>
-                                  <td style={{ fontSize: 12 }}>{r.name}</td>
-                                  <td style={{ fontSize: 12 }}>{r.phone}</td>
-                                  {allVariants.map(v => (
-                                    <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>
-                                  ))}
-                                  <td className="report-row-total">{r.total}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                            <tfoot>
-                              <tr className="report-totals-row">
-                                <td colSpan={5}><strong>Total</strong></td>
-                                {allVariants.map(v => {
-                                  const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
-                                  return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
-                                })}
-                                <td className="report-row-total">
-                                  <strong>
-                                    {addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}
-                                  </strong>
-                                </td>
-                              </tr>
-                            </tfoot>
-                          </table>
-                        </div>
                       </>
                     );
                   })()}
