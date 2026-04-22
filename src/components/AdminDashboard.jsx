@@ -331,7 +331,7 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
                                   </button>
                                 </td>
                                 <td><strong>₹{o.total_price}</strong></td>
-                                <td style={{ fontSize: 12 }}>{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+                                <td style={{ fontSize: 12 }}>{o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                               </tr>
                               {isExp && (
                                 <tr className="order-detail-row">
@@ -544,6 +544,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportLoading, setReportLoading] = useState(false);
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
   const [reportSubTab, setReportSubTab] = useState('all-orders');
+  const [addressFilter, setAddressFilter] = useState('');
+  const [orderColVisibility, setOrderColVisibility] = useState({ tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false });
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
@@ -1883,7 +1885,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           <td style={{ textAlign: 'center' }}>{o.items_count ?? '—'}</td>
                           <td><span className={`status-badge status-${o.order_status}`}>{o.order_status}</span></td>
                           <td><strong>₹{o.total_price}</strong></td>
-                          <td style={{ fontSize: 12 }}>{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+                          <td style={{ fontSize: 12 }}>{o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2229,6 +2231,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
             {ordersSubTab === 'all' && (<>
 
+            {/* ── Address filter banner ── */}
+            {addressFilter && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '8px 14px', marginBottom: 10, fontSize: 13 }}>
+                <span style={{ color: '#15803d', fontWeight: 600 }}>Showing orders for:</span>
+                <span style={{ color: '#1f2937' }}>{addressFilter}</span>
+                <button
+                  onClick={() => setAddressFilter('')}
+                  style={{ marginLeft: 'auto', background: 'none', border: '1px solid #86efac', borderRadius: 6, padding: '2px 10px', cursor: 'pointer', color: '#15803d', fontWeight: 600, fontSize: 12 }}
+                >✕ Clear</button>
+              </div>
+            )}
+
             {/* ── Filter panel ── */}
             <div className="orders-filter-panel">
               {/* Row 1: horizontal toggle buttons */}
@@ -2305,6 +2319,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     setOrderFilters(cleared);
                     setActiveFilters({ delivery_type: false, payment_status: false, order_status: false, pickup_location_id: false, payment_method: false });
                     setOrderSelectedIds([]);
+                    setAddressFilter('');
                     fetchAllOrders(cleared);
                   }}
                 >
@@ -2369,6 +2384,27 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </div>
             )}
 
+            {/* ── Column chooser ── */}
+            <div className="orders-col-chooser">
+              <span className="orders-col-chooser-label">Show columns:</span>
+              {[
+                { key: 'tag',        label: 'Tag' },
+                { key: 'assignedTo', label: 'Assigned To' },
+                { key: 'delCode',    label: 'Del. Code' },
+                { key: 'shipment',   label: 'Shipment' },
+                { key: 'itemNames',  label: 'Item Names' },
+              ].map(({ key, label }) => (
+                <label key={key} className="orders-col-toggle">
+                  <input
+                    type="checkbox"
+                    checked={orderColVisibility[key]}
+                    onChange={() => setOrderColVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
             {/* ── Orders table ── */}
             {ordersLoading ? (
               <div className="loading">Loading orders...</div>
@@ -2393,17 +2429,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <th>Order Status</th>
                       <th>Payment</th>
                       <th>Method</th>
-                      <th>Tag</th>
-                      <th>Assigned To</th>
-                      <th>Del. Code</th>
-                      <th>Shipment</th>
+                      {orderColVisibility.tag        && <th>Tag</th>}
+                      {orderColVisibility.assignedTo && <th>Assigned To</th>}
+                      {orderColVisibility.delCode    && <th>Del. Code</th>}
+                      {orderColVisibility.shipment   && <th>Shipment</th>}
+                      {orderColVisibility.itemNames  && <th>Item Names</th>}
                       <th>Items</th>
                       <th>Total</th>
                       <th>Date</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {allOrders.map(o => {
+                    {(addressFilter
+                      ? allOrders.filter(o => {
+                          const addr = o.delivery_type === 'pickup'
+                            ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                            : (o.delivery_address || '');
+                          return addr.trim() === addressFilter;
+                        })
+                      : allOrders
+                    ).map(o => {
                       const isSelected = orderSelectedIds.includes(o.id);
                       const isExpanded = expandedOrderId === o.id;
                       return (
@@ -2447,22 +2492,41 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 </div>
                               )}
                             </td>
-                            <td>
-                              {o.delivery_tag_name
-                                ? <span className="delivery-tag-badge" style={{ background: (o.delivery_tag_color || '#6b7280') + '22', color: o.delivery_tag_color || '#6b7280', border: `1px solid ${(o.delivery_tag_color || '#6b7280')}55` }}>🏷️ {o.delivery_tag_name}</span>
-                                : <span style={{ color: '#d1d5db' }}>—</span>}
-                            </td>
-                            <td style={{ fontSize: 12 }}>
-                              {o.delivery_boy_name
-                                ? <span className="assigned-badge">{o.delivery_boy_name}</span>
-                                : <span style={{ color: '#9ca3af' }}>—</span>}
-                            </td>
-                            <td style={{ fontSize: 11, color: '#6b7280' }}>{o.delivery_code || '—'}</td>
-                            <td style={{ fontSize: 12, textAlign: 'center' }}>
-                              {o.shipment_id
-                                ? <span className="shipment-id-badge">#{o.shipment_id}</span>
-                                : <span style={{ color: '#9ca3af' }}>—</span>}
-                            </td>
+                            {orderColVisibility.tag && (
+                              <td>
+                                {o.delivery_tag_name
+                                  ? <span className="delivery-tag-badge" style={{ background: (o.delivery_tag_color || '#6b7280') + '22', color: o.delivery_tag_color || '#6b7280', border: `1px solid ${(o.delivery_tag_color || '#6b7280')}55` }}>🏷️ {o.delivery_tag_name}</span>
+                                  : <span style={{ color: '#d1d5db' }}>—</span>}
+                              </td>
+                            )}
+                            {orderColVisibility.assignedTo && (
+                              <td style={{ fontSize: 12 }}>
+                                {o.delivery_boy_name
+                                  ? <span className="assigned-badge">{o.delivery_boy_name}</span>
+                                  : <span style={{ color: '#9ca3af' }}>—</span>}
+                              </td>
+                            )}
+                            {orderColVisibility.delCode && (
+                              <td style={{ fontSize: 11, color: '#6b7280' }}>{o.delivery_code || '—'}</td>
+                            )}
+                            {orderColVisibility.shipment && (
+                              <td style={{ fontSize: 12, textAlign: 'center' }}>
+                                {o.shipment_id
+                                  ? <span className="shipment-id-badge">#{o.shipment_id}</span>
+                                  : <span style={{ color: '#9ca3af' }}>—</span>}
+                              </td>
+                            )}
+                            {orderColVisibility.itemNames && (
+                              <td className="orders-item-names-cell">
+                                {(o.items || []).length === 0
+                                  ? <span style={{ color: '#9ca3af' }}>—</span>
+                                  : (o.items || []).map((it, idx) => (
+                                      <div key={idx} style={{ whiteSpace: 'nowrap' }}>
+                                        {(it.variant || '').split(/[-–]/)[0].trim()} <span style={{ color: '#6b7280' }}>({it.qty})</span>
+                                      </div>
+                                    ))}
+                              </td>
+                            )}
                             <td style={{ textAlign: 'center', fontSize: 13 }}>
                               <button className="items-toggle-btn" onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}>
                                 {o.items_count} item{o.items_count !== 1 ? 's' : ''} {isExpanded ? '▲' : '▼'}
@@ -2470,7 +2534,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </td>
                             <td><strong>₹{o.total_price}</strong></td>
                             <td style={{ fontSize: 12 }}>
-                              {o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}
+                              {o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                             </td>
                           </tr>
 
@@ -3013,7 +3077,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <tbody>
                               {deliveryRows.map(r => (
                                 <tr key={r.addr}>
-                                  <td className="report-loc-name" style={{ fontSize: 12 }}>{r.addr}</td>
+                                  <td
+                                    className="report-loc-name"
+                                    style={{ fontSize: 12, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}
+                                    title="Click to view all orders for this address"
+                                    onClick={() => { setAddressFilter(r.addr); setReportSubTab('all-orders'); setOrdersSubTab('all'); }}
+                                  >{r.addr}</td>
                                   <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
