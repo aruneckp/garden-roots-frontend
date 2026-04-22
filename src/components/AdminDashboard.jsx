@@ -3059,6 +3059,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     });
                     allVariants.sort();
 
+                    const extractPostal = addr => { const m = addr && addr.match(/\b(\d{5,6})\s*$/); return m ? m[1] : ''; };
+
                     // Build address → variant → qty map
                     // Delivery orders use delivery_address; pickup orders use the pickup location's physical address
                     const addressMap = {};
@@ -3067,7 +3069,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
                         : o.delivery_address.trim();
                       const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
-                      if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type };
+                      if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '' };
                       (o.items || []).forEach(it => {
                         const v = stripStd(it.variant);
                         if (v) {
@@ -3087,7 +3089,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       addresses.map(addr => {
                         const row = addressMap[addr];
                         const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
-                        return { addr, type: row._type, name: row._name, phone: row._phone, ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
+                        return { addr, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
                       }),
                       deliverySort.col, deliverySort.dir
                     );
@@ -3098,10 +3100,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           <button
                             className="report-download-btn"
                             onClick={() => {
-                              const headers = ['Address / Collection Point', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
-                              const rows = deliveryRows.map(r => [r.addr, r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
+                              const headers = ['Address / Collection Point', 'Postal', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
+                              const rows = deliveryRows.map(r => [r.addr, r.postal || '', r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
                               const totalsRow = [
-                                'TOTAL', '', '', '',
+                                'TOTAL', '', '', '', '',
                                 ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)),
                                 addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0),
                               ];
@@ -3117,6 +3119,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <thead>
                               <tr>
                                 <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
+                                <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
                                 <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
                                 <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
                                 <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
@@ -3135,6 +3138,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     title="Click to view all orders for this address"
                                     onClick={() => { setAddressFilter(r.addr); setReportSubTab('all-orders'); setOrdersSubTab('all'); }}
                                   >{r.addr}</td>
+                                  <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>
+                                    {r.postal || '—'}
+                                  </td>
                                   <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
@@ -3153,7 +3159,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </tbody>
                             <tfoot>
                               <tr className="report-totals-row">
-                                <td colSpan={4}><strong>Total</strong></td>
+                                <td colSpan={5}><strong>Total</strong></td>
                                 {allVariants.map(v => {
                                   const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                   return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
