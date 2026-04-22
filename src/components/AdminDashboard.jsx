@@ -2403,6 +2403,58 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   {label}
                 </label>
               ))}
+              <button
+                className="report-download-btn"
+                style={{ marginLeft: 'auto' }}
+                disabled={allOrders.length === 0}
+                onClick={() => {
+                  const filtered = addressFilter
+                    ? allOrders.filter(o => {
+                        const addr = o.delivery_type === 'pickup'
+                          ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                          : (o.delivery_address || '');
+                        return addr.trim() === addressFilter;
+                      })
+                    : allOrders;
+
+                  const headers = [
+                    'Order Ref', 'Customer', 'Phone', 'Mode', 'Location / Address',
+                    'Order Status', 'Payment Status', 'Payment Method',
+                    ...(orderColVisibility.tag        ? ['Tag']         : []),
+                    ...(orderColVisibility.assignedTo ? ['Assigned To'] : []),
+                    ...(orderColVisibility.delCode    ? ['Del. Code']   : []),
+                    ...(orderColVisibility.shipment   ? ['Shipment']    : []),
+                    ...(orderColVisibility.itemNames  ? ['Item Names']  : []),
+                    'Items', 'Total', 'Date',
+                  ];
+
+                  const rows = filtered.map(o => [
+                    o.order_ref,
+                    o.customer_name,
+                    o.customer_phone || '',
+                    o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup',
+                    o.delivery_type === 'pickup'
+                      ? (o.pickup_location_name || `Loc #${o.pickup_location_id}`)
+                      : (o.delivery_address || ''),
+                    o.order_status,
+                    o.payment_status,
+                    o.payment_method || '',
+                    ...(orderColVisibility.tag        ? [o.delivery_tag_name || '']  : []),
+                    ...(orderColVisibility.assignedTo ? [o.delivery_boy_name || '']  : []),
+                    ...(orderColVisibility.delCode    ? [o.delivery_code || '']      : []),
+                    ...(orderColVisibility.shipment   ? [o.shipment_id ? `#${o.shipment_id}` : ''] : []),
+                    ...(orderColVisibility.itemNames  ? [(o.items || []).map(it => `${(it.variant || '').split(/[-–]/)[0].trim()} (${it.qty})`).join('; ')] : []),
+                    o.items_count,
+                    o.total_price,
+                    o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
+                  ]);
+
+                  const now = new Date().toISOString().slice(0, 10);
+                  downloadCSV(`all-orders-${now}.csv`, headers, rows);
+                }}
+              >
+                ⬇ Download CSV
+              </button>
             </div>
 
             {/* ── Orders table ── */}
@@ -3008,11 +3060,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     allVariants.sort();
 
                     // Build address → variant → qty map
-                    // Delivery orders use delivery_address; pickup orders use location name
+                    // Delivery orders use delivery_address; pickup orders use the pickup location's physical address
                     const addressMap = {};
                     deliveryOrders.forEach(o => {
                       const addr = o.delivery_type === 'pickup'
-                        ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                        ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
                         : o.delivery_address.trim();
                       const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
                       if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type };
