@@ -331,9 +331,7 @@ export default function Checkout() {
           {confirmedItems.map(item => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {item.image
-                  ? <img src={item.image} alt={item.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--mango-light)' }} />
-                  : <span style={{ fontSize: 22 }}>{item.emoji}</span>}
+                <img src={item.image || '/banginapalli.jpg'} alt={item.name} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--mango-light)' }} onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--dark)' }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: '#78716C' }}>Qty: {item.qty}</div>
@@ -476,9 +474,7 @@ export default function Checkout() {
           {cart.map(item => (
             <div className="checkout-order-item" key={item.id}>
               <div className="checkout-order-item-left">
-                {item.image
-                  ? <img src={item.image} alt={item.name} className="checkout-item-img" />
-                  : <span className="checkout-item-emoji">{item.emoji}</span>}
+                <img src={item.image || '/banginapalli.jpg'} alt={item.name} className="checkout-item-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                 <div className="checkout-item-name">{item.name}</div>
               </div>
               <div className="checkout-item-qty-ctrl">

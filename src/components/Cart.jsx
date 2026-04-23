@@ -45,9 +45,7 @@ export default function Cart() {
             {cart.map(item => (
               <div className="cart-item" key={item.id}>
                 <div className="cart-item-emoji">
-                  {item.image
-                    ? <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    : item.emoji}
+                  <img src={item.image || '/banginapalli.jpg'} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                 </div>
                 <div className="cart-item-info">
                   <div className="cart-item-name">{item.name}</div>

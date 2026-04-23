@@ -72,9 +72,7 @@ export default function Chatbot({ hideFab = false }) {
                           {cart.map(item => (
                             <div className="chat-cart-item" key={item.id}>
                               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                {item.image
-                                  ? <img src={item.image} alt={item.name} className="chat-cart-item-img" />
-                                  : <span>{item.emoji}</span>}
+                                <img src={item.image || '/banginapalli.jpg'} alt={item.name} className="chat-cart-item-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                                 {item.name} ×{item.qty}
                               </span>
                               <span style={{ fontWeight: 700, color: 'var(--green)' }}>${parseFloat(item.price.replace('$', '')) * item.qty}</span>
@@ -105,9 +103,7 @@ export default function Chatbot({ hideFab = false }) {
                         return (
                           <div className="chat-variety-row" key={v.id}>
                             <div className="chat-variety-left">
-                              {v.image
-                                ? <img src={v.image} alt={v.name} className="chat-variety-img" />
-                                : <span className="chat-variety-emoji">{v.emoji}</span>}
+                              <img src={v.image || '/banginapalli.jpg'} alt={v.name} className="chat-variety-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                               <div>
                                 <div className="chat-variety-name">{v.name}</div>
                                 <div className="chat-variety-price">{v.price}/box <span className="chat-variety-tag">· {v.tag}</span></div>

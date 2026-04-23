@@ -74,9 +74,7 @@ export default function VarietiesSection() {
                 {/* ── Body: image + local names ── */}
                 <div className="vc-body">
                   <div className="vc-img-wrap">
-                    {v.image
-                      ? <img src={v.image} alt={v.name} className="vc-img" />
-                      : <span className="vc-emoji">{v.emoji}</span>}
+                    <img src={v.image || '/banginapalli.jpg'} alt={v.name} className="vc-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
                   </div>
                   <div className="vc-local-names">
                     {shuffledNames[v.id]?.map((entry, i) => (

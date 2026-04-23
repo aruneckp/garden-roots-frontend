@@ -529,10 +529,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
   // Delivery tags state
   const [deliveryTags, setDeliveryTags] = useState([]);
-  const [tagForm, setTagForm] = useState({ name: '', color: '#6b7280' });
+  const [tagForm, setTagForm] = useState({ name: '', color: '#6b7280', is_active: 1 });
   const [tagLoading, setTagLoading] = useState(false);
   const [tagError, setTagError] = useState('');
   const [tagSuccess, setTagSuccess] = useState('');
+  const [tagPriceEdits, setTagPriceEdits] = useState({});
 
   // Bulk tag assignment (Orders tab)
   const [bulkTagId, setBulkTagId] = useState('');
@@ -567,10 +568,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsSelectedAddrs, setDsSelectedAddrs] = useState(new Set());
   const [dsBulkStatus, setDsBulkStatus] = useState('');
   const [dsBulkNote, setDsBulkNote] = useState('');
+  const [dsBulkTag, setDsBulkTag] = useState('');
   const [dsAddressFilter, setDsAddressFilter] = useState(null);
   const [dsOrderSelectedIds, setDsOrderSelectedIds] = useState([]);
   const [dsOrderBulkStatus, setDsOrderBulkStatus] = useState('');
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
+  const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
 
   // Global toast — shared across all actions
@@ -959,11 +962,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: tagForm.name.trim(), color: tagForm.color }),
+        body: JSON.stringify({
+          name: tagForm.name.trim(),
+          color: tagForm.color,
+          is_active: tagForm.is_active,
+        }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
       setTagSuccess('Tag created!');
-      setTagForm({ name: '', color: '#6b7280' });
+      setTagForm({ name: '', color: '#6b7280', is_active: 1 });
       fetchDeliveryTags();
     } catch (err) {
       setTagError(err.message);
@@ -980,6 +987,20 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchDeliveryTags();
     } catch (err) {
       showToast('error', `Delete tag failed: ${err.message}`);
+    }
+  };
+
+  const handleUpdateTag = async (tagId, patch) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags/${tagId}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+      fetchDeliveryTags();
+    } catch (err) {
+      showToast('error', `Update tag failed: ${err.message}`);
     }
   };
 
@@ -1735,6 +1756,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                         style={{ width: 48, height: 36, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', padding: 2 }}
                       />
                     </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 13, color: '#374151', whiteSpace: 'nowrap' }}>Active:</label>
+                      <input
+                        type="checkbox"
+                        checked={tagForm.is_active === 1}
+                        onChange={e => setTagForm(f => ({ ...f, is_active: e.target.checked ? 1 : 0 }))}
+                      />
+                    </div>
                   </div>
                   {tagError && <div className="db-error">{tagError}</div>}
                   {tagSuccess && <div className="db-success">{tagSuccess}</div>}
@@ -1752,21 +1781,54 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <tr>
                         <th>#</th>
                         <th>Tag</th>
-                        <th>Name</th>
+                        <th>Price (SGD)</th>
+                        <th>Status</th>
                         <th>Created</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
                       {deliveryTags.map((tag, i) => (
-                        <tr key={tag.id}>
+                        <tr key={tag.id} style={!tag.is_active ? { opacity: 0.5 } : undefined}>
                           <td>{i + 1}</td>
                           <td>
                             <span className="delivery-tag-badge" style={{ background: TAG_PALETTE[i % TAG_PALETTE.length] + '22', color: TAG_PALETTE[i % TAG_PALETTE.length], border: `1px solid ${TAG_PALETTE[i % TAG_PALETTE.length]}55` }}>
                               🏷️ {tag.name}
                             </span>
                           </td>
-                          <td>{tag.name}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 13, color: '#374151' }}>$</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="0.00"
+                                value={tagPriceEdits[tag.id] !== undefined ? tagPriceEdits[tag.id] : (tag.price != null ? Number(tag.price).toFixed(2) : '')}
+                                onChange={e => setTagPriceEdits(p => ({ ...p, [tag.id]: e.target.value }))}
+                                onBlur={async () => {
+                                  const val = tagPriceEdits[tag.id];
+                                  if (val === undefined) return;
+                                  await handleUpdateTag(tag.id, { price: val !== '' ? parseFloat(val) : null });
+                                  setTagPriceEdits(p => { const n = { ...p }; delete n[tag.id]; return n; });
+                                }}
+                                onKeyDown={async e => {
+                                  if (e.key === 'Enter') e.currentTarget.blur();
+                                  if (e.key === 'Escape') setTagPriceEdits(p => { const n = { ...p }; delete n[tag.id]; return n; });
+                                }}
+                                style={{ width: 80, fontSize: 13, fontWeight: 600, padding: '3px 6px', border: '1px solid #d1d5db', borderRadius: 5 }}
+                              />
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              className={tag.is_active ? 'submit-button' : 'cancel-button'}
+                              style={{ fontSize: 12, padding: '3px 10px', minWidth: 70 }}
+                              onClick={() => handleUpdateTag(tag.id, { is_active: tag.is_active ? 0 : 1 })}
+                            >
+                              {tag.is_active ? '✅ Active' : '⏸ Inactive'}
+                            </button>
+                          </td>
                           <td style={{ fontSize: 12, color: '#6b7280' }}>
                             {tag.created_at ? new Date(tag.created_at).toLocaleDateString() : '—'}
                           </td>
@@ -2181,7 +2243,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               };
 
               const handleDsBulkStatus = async () => {
-                if (!dsBulkStatus || dsSelectedAddrs.size === 0) return;
+                if ((!dsBulkStatus && !dsBulkTag) || dsSelectedAddrs.size === 0) return;
                 const orderIds = deliveryOrders
                   .filter(o => {
                     const a = o.delivery_type === 'pickup'
@@ -2192,17 +2254,31 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   .map(o => o.id);
                 if (!orderIds.length) return;
                 try {
-                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
-                    method: 'PUT',
-                    headers: { ...headers, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ order_ids: orderIds, new_status: dsBulkStatus, note: dsBulkNote || null }),
-                  });
-                  if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
-                  const data = await res.json();
-                  showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                  if (dsBulkStatus) {
+                    const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                      method: 'PUT',
+                      headers: { ...headers, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ order_ids: orderIds, new_status: dsBulkStatus, note: dsBulkNote || null }),
+                    });
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
+                    const data = await res.json();
+                    showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                  }
+                  if (dsBulkTag) {
+                    const tagIdPayload = dsBulkTag === 'clear' ? null : Number(dsBulkTag);
+                    const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+                      method: 'PUT',
+                      headers: { ...headers, 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ order_ids: orderIds, tag_id: tagIdPayload }),
+                    });
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+                    const tagName = tagIdPayload === null ? 'cleared' : (deliveryTags.find(t => t.id === tagIdPayload)?.name || 'tag');
+                    showToast('success', `Tag "${tagName}" applied to ${orderIds.length} order(s)`);
+                  }
                   setDsSelectedAddrs(new Set());
                   setDsBulkStatus('');
                   setDsBulkNote('');
+                  setDsBulkTag('');
                   fetchReportOrders();
                 } catch (err) {
                   showToast('error', `Bulk update failed: ${err.message}`);
@@ -2262,6 +2338,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               <option value="cancelled">Cancelled</option>
                               <option value="pending">Pending</option>
                             </select>
+                            <select value={dsOrderBulkTag} onChange={e => setDsOrderBulkTag(e.target.value)} className="orders-filter-select">
+                              <option value="">— Set Tag —</option>
+                              <option value="clear">🚫 Clear Tag</option>
+                              {deliveryTags.filter(t => t.is_active).map(t => (
+                                <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>
+                              ))}
+                            </select>
                             <input
                               type="text"
                               placeholder="Note (optional)"
@@ -2271,21 +2354,34 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             />
                             <button
                               className="submit-button"
-                              disabled={!dsOrderBulkStatus}
+                              disabled={!dsOrderBulkStatus && !dsOrderBulkTag}
                               onClick={async () => {
-                                if (!dsOrderBulkStatus) return;
                                 try {
-                                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
-                                    method: 'PUT',
-                                    headers: { ...headers, 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ order_ids: dsOrderSelectedIds, new_status: dsOrderBulkStatus, note: dsOrderBulkNote || null }),
-                                  });
-                                  if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
-                                  const data = await res.json();
-                                  showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                                  if (dsOrderBulkStatus) {
+                                    const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                                      method: 'PUT',
+                                      headers: { ...headers, 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ order_ids: dsOrderSelectedIds, new_status: dsOrderBulkStatus, note: dsOrderBulkNote || null }),
+                                    });
+                                    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || d.error || 'Failed'); }
+                                    const data = await res.json();
+                                    showToast('success', `Updated ${data.count} order(s) to "${data.new_status}"`);
+                                  }
+                                  if (dsOrderBulkTag) {
+                                    const tagIdPayload = dsOrderBulkTag === 'clear' ? null : Number(dsOrderBulkTag);
+                                    const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+                                      method: 'PUT',
+                                      headers: { ...headers, 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ order_ids: dsOrderSelectedIds, tag_id: tagIdPayload }),
+                                    });
+                                    if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
+                                    const tagName = tagIdPayload === null ? 'cleared' : (deliveryTags.find(t => t.id === tagIdPayload)?.name || 'tag');
+                                    showToast('success', `Tag "${tagName}" applied to ${dsOrderSelectedIds.length} order(s)`);
+                                  }
                                   setDsOrderSelectedIds([]);
                                   setDsOrderBulkStatus('');
                                   setDsOrderBulkNote('');
+                                  setDsOrderBulkTag('');
                                   fetchReportOrders();
                                 } catch (err) {
                                   showToast('error', `Bulk update failed: ${err.message}`);
@@ -2294,7 +2390,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             >
                               Update {dsOrderSelectedIds.length} Order(s)
                             </button>
-                            <button className="cancel-button" onClick={() => { setDsOrderSelectedIds([]); setDsOrderBulkStatus(''); setDsOrderBulkNote(''); }} style={{ marginLeft: 4 }}>
+                            <button className="cancel-button" onClick={() => { setDsOrderSelectedIds([]); setDsOrderBulkStatus(''); setDsOrderBulkNote(''); setDsOrderBulkTag(''); }} style={{ marginLeft: 4 }}>
                               Clear
                             </button>
                           </div>
@@ -2372,6 +2468,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <option value="cancelled">Cancelled</option>
                             <option value="pending">Pending</option>
                           </select>
+                          <select value={dsBulkTag} onChange={e => setDsBulkTag(e.target.value)} className="orders-filter-select">
+                            <option value="">— Set Tag —</option>
+                            <option value="clear">🚫 Clear Tag</option>
+                            {deliveryTags.filter(t => t.is_active).map(t => (
+                              <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>
+                            ))}
+                          </select>
                           <input
                             type="text"
                             placeholder="Note (optional)"
@@ -2379,10 +2482,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             onChange={e => setDsBulkNote(e.target.value)}
                             className="bulk-note-input"
                           />
-                          <button className="submit-button" disabled={!dsBulkStatus} onClick={handleDsBulkStatus}>
+                          <button className="submit-button" disabled={!dsBulkStatus && !dsBulkTag} onClick={handleDsBulkStatus}>
                             Update Orders
                           </button>
-                          <button className="cancel-button" onClick={() => { setDsSelectedAddrs(new Set()); setDsBulkStatus(''); setDsBulkNote(''); }} style={{ marginLeft: 4 }}>
+                          <button className="cancel-button" onClick={() => { setDsSelectedAddrs(new Set()); setDsBulkStatus(''); setDsBulkNote(''); setDsBulkTag(''); }} style={{ marginLeft: 4 }}>
                             Clear
                           </button>
                         </div>
@@ -2418,7 +2521,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
                               {allVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
                               <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
-                              <th style={{ whiteSpace: 'nowrap' }}>Apply Tag</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2457,14 +2559,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 <td style={{ fontSize: 12 }}>{r.phone}</td>
                                 {allVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
                                 <td className="report-row-total">{r.total}</td>
-                                <td style={{ whiteSpace: 'nowrap' }}>
-                                  <select defaultValue="" className="orders-filter-select" style={{ fontSize: 11, padding: '2px 4px' }}
-                                    onChange={e => { if (e.target.value) { applyTagToAddress(r.addr, e.target.value); e.target.value = ''; } }}>
-                                    <option value="">🏷️ Tag…</option>
-                                    <option value="clear">🚫 Clear Tag</option>
-                                    {deliveryTags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                  </select>
-                                </td>
                               </tr>
                               );
                             })}
@@ -2477,7 +2571,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
                               })}
                               <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
-                              <td />
                             </tr>
                           </tfoot>
                         </table>
