@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import { API_BASE } from '../services/api';
+import MangoLoader from './MangoLoader';
 
 export default function PaymentTracker() {
   const [shipments, setShipments] = useState([]);
@@ -130,7 +131,7 @@ export default function PaymentTracker() {
       <h2>💰 Payment Tracker</h2>
 
       {error && <div className="error-banner">⚠️ {error}</div>}
-      {loading && <div className="loading">⏳ Loading...</div>}
+      {loading && <MangoLoader text="Loading payments…" />}
 
       <div className="admin-nav">
         <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { userApi } from '../services/api';
+import MangoLoader from './MangoLoader';
 
 const STATUS_META = {
   pending:   { label: 'Pending',    color: '#F59E0B', icon: '🕐', desc: 'Order received, awaiting payment' },
@@ -125,12 +126,7 @@ export default function MyBookings() {
         <p className="bookings-sub">Order history for {user.email}</p>
       </div>
 
-      {myOrdersLoading && (
-        <div className="bookings-loading">
-          <div className="spinner" />
-          <p>Loading your orders…</p>
-        </div>
-      )}
+      {myOrdersLoading && <MangoLoader text="Loading your orders…" />}
 
       {!myOrdersLoading && myOrdersError && (
         <div className="bookings-error">

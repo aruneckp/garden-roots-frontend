@@ -4,6 +4,7 @@ import { orderApi, paymentApi, promoApi } from '../services/api';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 import SimpleDeliveryFee from './SimpleDeliveryFee';
+import MangoLoader from './MangoLoader';
 
 // Tracks whether google.accounts.id.initialize() has been called — must only happen once
 let gsiInitialized = false;
@@ -533,13 +534,7 @@ export default function Checkout() {
           {payState === 'processing' ? (
             <div className="payment-body">
               <div className="payment-processing">
-                <div className="mango-loader">
-                  <span className="mango-loader-emoji">🥭</span>
-                  <div className="mango-loader-dots">
-                    <span /><span /><span />
-                  </div>
-                  <div className="mango-loader-text">Verifying your payment…</div>
-                </div>
+                <MangoLoader text="Verifying your payment…" />
               </div>
             </div>
           ) : payState === 'failed' ? (

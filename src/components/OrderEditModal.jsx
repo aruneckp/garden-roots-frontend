@@ -1,10 +1,301 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { API_BASE } from '../services/api';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const PAYMENT_STATUS_OPTIONS = ['pending', 'succeeded', 'failed', 'cancelled'];
 
+const ACTION_ICONS = {
+  create:   '🆕',
+  status:   '🔄',
+  payment:  '💳',
+  collect:  '💰',
+  items:    '📦',
+  customer: '👤',
+  delivery: '🚚',
+  notes:    '📝',
+  cancel:   '❌',
+};
+
+function ActionHistoryTab({ order, headers }) {
+  const [logs,    setLogs]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+  const headersRef = useRef(headers);
+  headersRef.current = headers;
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    fetch(`${API_BASE}/api/v1/admin/orders/${order.id}/action-logs`, { headers: headersRef.current })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data  => { if (!cancelled) setLogs(data); })
+      .catch(()   => { if (!cancelled) setError('Failed to load action history.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [order.id]);
+
+  const fmt = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleString('en-SG', { dateStyle: 'medium', timeStyle: 'short' });
+  };
+
+  const renderDetails = (details) => {
+    if (!details) return null;
+    const entries = Object.entries(details);
+    if (entries.length === 0) return null;
+    return (
+      <div className="oem-ahl-details">
+        {entries.flatMap(([k, v]) => {
+          // old→new scalar diff  { old: x, new: y }
+          if (v && typeof v === 'object' && !Array.isArray(v) && 'old' in v && 'new' in v) {
+            return (
+              <div key={k} className="oem-ahl-change-row">
+                <span className="oem-ahl-field">{k.replace(/_/g, ' ')}</span>
+                <span className="oem-ahl-old">{String(v.old ?? '—')}</span>
+                <span className="oem-ahl-arrow">→</span>
+                <span className="oem-ahl-new">{String(v.new ?? '—')}</span>
+              </div>
+            );
+          }
+          // items diff: added / removed  (array of strings)
+          if (Array.isArray(v) && (k === 'added' || k === 'removed')) {
+            return v.map((label, i) => (
+              <div key={`${k}-${i}`} className={`oem-ahl-change-row oem-ahl-item-${k}`}>
+                <span className="oem-ahl-field">{k}</span>
+                <span className={k === 'added' ? 'oem-ahl-new' : 'oem-ahl-old'}>{label}</span>
+              </div>
+            ));
+          }
+          // items diff: changed  (array of { name, old, new })
+          if (Array.isArray(v) && k === 'changed') {
+            return v.map((c, i) => (
+              <div key={`changed-${i}`} className="oem-ahl-change-row">
+                <span className="oem-ahl-field">{c.name}</span>
+                <span className="oem-ahl-old">×{c.old}</span>
+                <span className="oem-ahl-arrow">→</span>
+                <span className="oem-ahl-new">×{c.new}</span>
+              </div>
+            ));
+          }
+          // fallback: scalar value
+          return (
+            <div key={k} className="oem-ahl-change-row">
+              <span className="oem-ahl-field">{k.replace(/_/g, ' ')}</span>
+              <span className="oem-ahl-new">{String(v ?? '—')}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="oem-ahl-state">
+      <div className="oem-ahl-mango-spin">🥭</div>
+      <div>Loading history…</div>
+    </div>
+  );
+  if (error)   return <div className="oem-ahl-state oem-ahl-error">{error}</div>;
+  if (logs.length === 0) return <div className="oem-ahl-state">No actions recorded yet.</div>;
+
+  return (
+    <div className="oem-ahl-timeline">
+      {logs.map((log) => {
+        const atype = log.action_type || {};
+        const icon  = ACTION_ICONS[atype.icon] || '📋';
+        const color = atype.color || '#6b7280';
+        return (
+          <div key={log.id} className="oem-ahl-event">
+            <div className="oem-ahl-dot" style={{ background: color }} />
+            <div className="oem-ahl-card">
+              <div className="oem-ahl-header">
+                <span className="oem-ahl-icon">{icon}</span>
+                <span className="oem-ahl-label" style={{ color }}>{atype.label || 'Action'}</span>
+                <span className="oem-ahl-time">{fmt(log.created_at)}</span>
+              </div>
+              <div className="oem-ahl-by">by {log.performed_by || 'system'}</div>
+              {log.note && <div className="oem-ahl-note">{log.note}</div>}
+              {renderDetails(log.details)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PaymentTab({ order, headers }) {
+  const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}');
+
+  const [actualPrice,        setActualPrice]        = useState(order.actual_price != null ? String(order.actual_price) : '');
+  const [comments,           setComments]           = useState(order.payment_comments || '');
+  const [receivedBy,         setReceivedBy]         = useState(order.payment_received_by || '');
+  const [collectionStatus,   setCollectionStatus]   = useState(order.payment_collection_status || 'to_be_received');
+  const [adminUsers,         setAdminUsers]         = useState([]);
+  const [usersLoading,       setUsersLoading]       = useState(true);
+  const [usersError,         setUsersError]         = useState('');
+  const [saving,             setSaving]             = useState(false);
+  const [error,              setError]              = useState('');
+  const [success,            setSuccess]            = useState('');
+
+  const headersRef = useRef(headers);
+  headersRef.current = headers;
+
+  useEffect(() => {
+    setUsersLoading(true);
+    setUsersError('');
+    fetch(`${API_BASE}/api/v1/admin/admin-users-list`, { headers: headersRef.current })
+      .then(async r => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.detail || `Failed to load admin users (${r.status})`);
+        }
+        return r.json();
+      })
+      .then(data => { setAdminUsers(data); setUsersLoading(false); })
+      .catch(err => { setUsersError(err.message); setUsersLoading(false); });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders/${order.id}/payment-details`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          actual_price:              actualPrice !== '' ? parseFloat(actualPrice) : null,
+          payment_comments:          comments   || null,
+          payment_received_by:       receivedBy || null,
+          payment_collection_status: collectionStatus,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const detail = body.detail;
+        throw new Error(Array.isArray(detail) ? detail.map(e => e.msg).join('; ') : detail || `Error ${res.status}`);
+      }
+      const data = await res.json();
+      setSuccess('Payment details saved.');
+      // reflect the updated_by back from server response
+      if (data.payment_updated_by) {
+        order.payment_updated_by = data.payment_updated_by;
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="oem-payment-tab">
+      <div className="oem-section-title">Payment Details</div>
+
+      <label className="oem-label">Actual Price Charged ($)</label>
+      <input
+        className="oem-input"
+        type="number"
+        step="0.01"
+        min="0"
+        value={actualPrice}
+        onChange={e => setActualPrice(e.target.value)}
+        placeholder={`Order total: $${parseFloat(order.total_price || 0).toFixed(2)}`}
+      />
+
+      <label className="oem-label">Comments</label>
+      <textarea
+        className="oem-input oem-textarea"
+        value={comments}
+        onChange={e => setComments(e.target.value)}
+        rows={3}
+        placeholder="Reason for reduced price or other payment notes"
+      />
+
+      <label className="oem-label">Received By</label>
+      {usersError ? (
+        <div className="oem-error" style={{ marginBottom: 8 }}>Could not load admin users: {usersError}</div>
+      ) : (
+        <select
+          className="oem-input"
+          value={receivedBy}
+          onChange={e => {
+            const selected = e.target.value;
+            setReceivedBy(selected);
+            // if the new selection is someone else and status is already "received", reset it
+            // Find myself in the loaded list by email, fall back to full_name or username
+            const myEntry = adminUsers.find(u => u.is_me);
+            // Reset to "to_be_received" if a different person is selected
+            const isSelf = !selected || (myEntry ? selected === myEntry.name : false);
+            if (!isSelf && collectionStatus === 'received') {
+              setCollectionStatus('to_be_received');
+            }
+          }}
+          disabled={usersLoading}
+        >
+          <option value="">{usersLoading ? 'Loading…' : '— Select admin user —'}</option>
+          {adminUsers.map(u => (
+            <option key={u.id} value={u.name}>{u.name}</option>
+          ))}
+        </select>
+      )}
+
+      <div className="oem-section-title" style={{ marginTop: 18 }}>Payment Collection Status</div>
+      {(() => {
+        const myEntry = adminUsers.find(u => u.is_me);
+        // Allow only when: no one selected, OR the selected person is confirmed as me
+        const canMarkReceived = !receivedBy || (myEntry ? receivedBy === myEntry.name : false);
+        return (
+          <div className="oem-radio-group">
+            <label className="oem-radio-label">
+              <input
+                type="radio"
+                name={`pcs-${order.id}`}
+                value="to_be_received"
+                checked={collectionStatus === 'to_be_received'}
+                onChange={() => setCollectionStatus('to_be_received')}
+              />
+              To be received
+            </label>
+            <label className={`oem-radio-label${canMarkReceived ? '' : ' oem-radio-label--disabled'}`}>
+              <input
+                type="radio"
+                name={`pcs-${order.id}`}
+                value="received"
+                checked={collectionStatus === 'received'}
+                onChange={() => setCollectionStatus('received')}
+                disabled={!canMarkReceived}
+              />
+              Received
+            </label>
+            {!canMarkReceived && (
+              <span className="oem-radio-hint">Only the assigned user can mark as Received</span>
+            )}
+          </div>
+        );
+      })()}
+
+      {error   && <div className="oem-error">{error}</div>}
+      {success && <div className="oem-pt-success">{success}</div>}
+
+      <div className="oem-pt-footer">
+        <button className="oem-save-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : '💾 Save Payment Details'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function OrderEditModal({ order, headers, activeProducts, pickupLocations, onClose, onSaved }) {
+  const [activeTab, setActiveTab] = useState('edit');
+
   // Editable fields
   const [customerName,      setCustomerName]      = useState(order.customer_name    || '');
   const [customerEmail,     setCustomerEmail]     = useState(order.customer_email   || '');
@@ -128,13 +419,50 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
         {/* Header */}
         <div className="oem-header">
           <div>
-            <h2 className="oem-title">Edit Order</h2>
+            <h2 className="oem-title">Order Details</h2>
             <span className="oem-ref">{order.order_ref}</span>
           </div>
           <button className="oem-close" onClick={onClose}>✕</button>
         </div>
 
-        <div className="oem-body">
+        {/* Tab bar */}
+        <div className="oem-tabs">
+          <button
+            className={`oem-tab${activeTab === 'edit' ? ' oem-tab--active' : ''}`}
+            onClick={() => setActiveTab('edit')}
+          >
+            ✏️ Edit Order
+          </button>
+          <button
+            className={`oem-tab${activeTab === 'payment' ? ' oem-tab--active' : ''}`}
+            onClick={() => setActiveTab('payment')}
+          >
+            💳 Payment
+          </button>
+          <button
+            className={`oem-tab${activeTab === 'history' ? ' oem-tab--active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            📋 Action History
+          </button>
+        </div>
+
+        {/* Payment tab */}
+        {activeTab === 'payment' && (
+          <div className="oem-body oem-body--single">
+            <PaymentTab order={order} headers={headers} />
+          </div>
+        )}
+
+        {/* Action History tab */}
+        {activeTab === 'history' && (
+          <div className="oem-body">
+            <ActionHistoryTab order={order} headers={headers} />
+          </div>
+        )}
+
+        {/* Edit Order tab */}
+        {activeTab === 'edit' && <div className="oem-body">
 
           {/* ── Left column: customer + delivery + status ── */}
           <div className="oem-col">
@@ -285,16 +613,18 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
-        {/* Footer */}
-        {error && <div className="oem-error">{error}</div>}
-        <div className="oem-footer">
-          <button className="oem-cancel-btn" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="oem-save-btn" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : '💾 Save Changes'}
-          </button>
-        </div>
+        {/* Footer — only on edit tab */}
+        {activeTab === 'edit' && <>
+          {error && <div className="oem-error">{error}</div>}
+          <div className="oem-footer">
+            <button className="oem-cancel-btn" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="oem-save-btn" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : '💾 Save Changes'}
+            </button>
+          </div>
+        </>}
 
       </div>
     </div>

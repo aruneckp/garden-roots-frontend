@@ -3,6 +3,7 @@ import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
 import PromoManager from './PromoManager';
+import MangoLoader from './MangoLoader';
 import { API_BASE } from '../services/api';
 import { useApp } from '../context/AppContext';
 import {
@@ -270,7 +271,7 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
 
                 {/* Orders table */}
                 {isLoading ? (
-                  <div className="loading" style={{ padding: 16 }}>Loading orders…</div>
+                  <MangoLoader text="Loading orders…" />
                 ) : orders.length === 0 ? (
                   <p style={{ color: '#6b7280', padding: '12px 0' }}>No orders match the filter.</p>
                 ) : (
@@ -1372,7 +1373,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
       <div className="admin-content">
         {error && <div className="error-banner">⚠️ {error}</div>}
-        {loading && <div className="loading">⏳ Loading...</div>}
+        {loading && <MangoLoader text="Loading…" />}
 
         {activeTab === 'dashboard' && dashboardData && !loading && (() => {
           const shipmentStatusData = [
@@ -2106,7 +2107,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </div>
 
               {assignedLoading ? (
-                <div className="loading" style={{ padding: 20 }}>Loading…</div>
+                <MangoLoader text="Loading assigned orders…" />
               ) : assignedOrders.length === 0 ? (
                 <p style={{ color: '#6b7280' }}>No assigned orders match the filter.</p>
               ) : (
@@ -2651,11 +2652,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <br />They were redirected to HitPay but didn't finish. Reach out to recover the sale.
                 </div>
                 {abandonedLoading ? (
-                  <div className="mango-loader">
-                    <span className="mango-loader-emoji">🥭</span>
-                    <div className="mango-loader-dots"><span /><span /><span /></div>
-                    <div className="mango-loader-text">Loading abandoned checkouts…</div>
-                  </div>
+                  <MangoLoader text="Loading abandoned checkouts…" />
                 ) : abandonedOrders.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
                     <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
@@ -2970,7 +2967,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
             {/* ── Orders table ── */}
             {ordersLoading ? (
-              <div className="loading">Loading orders...</div>
+              <MangoLoader text="Loading orders…" />
             ) : allOrders.length === 0 ? (
               <p style={{ color: '#6b7280', marginTop: 16 }}>No orders match the selected filters.</p>
             ) : (
@@ -3457,7 +3454,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           return (
             <div className="dashboard-section">
               {reportLoading ? (
-                <div className="loading">⏳ Loading report data…</div>
+                <MangoLoader text="Loading report data…" />
               ) : (
                 <>
                   {/* Shared: Total boxes banner + shipment filters */}

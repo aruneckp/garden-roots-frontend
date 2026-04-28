@@ -33,6 +33,8 @@ export default function AdminLogin({ onLoginSuccess }) {
         id: data.user_id,
         username: data.username,
         role: data.role,
+        full_name: data.full_name || null,
+        email: data.email || null,
       }));
       onLoginSuccess();
     } catch (err) {

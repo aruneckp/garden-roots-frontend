@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 import { API_BASE } from '../services/api';
+import MangoLoader from './MangoLoader';
 
 const EMPTY_FORM = {
   name: '',
@@ -167,7 +168,7 @@ export default function PickupLocationManager() {
       </div>
 
       {error && <div className="error-banner">⚠️ {error}</div>}
-      {loading && <div className="loading">⏳ Loading...</div>}
+      {loading && <MangoLoader text="Loading locations…" />}
 
       {showForm && (
         <form onSubmit={handleSubmit} className="create-form">

@@ -1701,3 +1701,138 @@ body {
 }
 .booking-payment.pending   { color: #F59E0B; }
 .booking-payment.cancelled { color: #EF4444; }
+
+/* ============================================================
+   TABLET (≤ 768px) — additional overrides for sections that
+   lacked mobile breakpoints
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Newsletter */
+  .newsletter { padding: 48px 16px; }
+  .newsletter p { font-size: 14px; max-width: 100%; }
+
+  /* My Bookings */
+  .my-bookings-page { padding: 28px 14px 80px; }
+  .bookings-header h1 { font-size: 26px; }
+
+  /* Section headings */
+  .section-sub { font-size: 14px; }
+
+  /* About — additional tweaks */
+  .about-hero { padding: 64px 16px; }
+  .about-hero p { font-size: 15px; }
+  .about-story { padding: 48px 16px; }
+  .about-values { padding: 48px 16px; }
+  .about-timeline { padding: 48px 16px; }
+  .about-mission { padding: 48px 16px; }
+
+  /* Contact */
+  .contact-hero { padding: 56px 16px; }
+  .contact-body { padding: 40px 14px; gap: 28px; }
+
+  /* Pickup page */
+  .pickup-hero { padding: 56px 16px; }
+  .pickup-body { padding: 40px 14px; }
+
+  /* Checkout 768px */
+  .checkout-order-card { padding: 16px; }
+  .payment-card-header { padding: 14px 16px 0; }
+  .payment-body { padding: 14px 16px 16px; }
+}
+
+/* ============================================================
+   MOBILE (≤ 480px) — Small phone overrides
+   ============================================================ */
+@media (max-width: 480px) {
+  /* Hero */
+  .hero-inner { padding: 4px 12px 6px; gap: 0; }
+  .hero-locations-box { max-width: 100%; }
+
+  /* State bar */
+  .state-bar { padding: 10px 12px; }
+  .state-bar-inner { flex-wrap: wrap; gap: 6px; font-size: 12px; }
+
+  /* Varieties: single column on narrow phones */
+  .varieties-grid { grid-template-columns: 1fr; gap: 12px; }
+
+  /* Newsletter */
+  .newsletter { padding: 32px 14px; }
+  .newsletter .section-title { font-size: 22px; }
+  .newsletter p { font-size: 13px; margin-bottom: 16px; }
+  .newsletter-form {
+    flex-direction: column;
+    border-radius: 10px;
+    overflow: visible;
+    box-shadow: none;
+    gap: 8px;
+  }
+  .newsletter-form input {
+    border-radius: 8px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+  }
+  .newsletter-form button {
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  /* Footer */
+  .footer { padding: 24px 14px 64px; }
+
+  /* About page */
+  .about-hero { padding: 48px 14px; }
+  .about-hero h1 { margin-bottom: 10px; }
+  .about-hero p { font-size: 13px; }
+  .about-stats { padding: 18px 14px; }
+  .about-stat strong { font-size: 28px; }
+  .about-story { padding: 32px 14px; gap: 24px; }
+  .about-timeline { padding: 32px 14px; }
+  .about-values { padding: 32px 14px; }
+  .about-mission { padding: 32px 14px; }
+  .about-mission blockquote { font-size: 16px; }
+
+  /* Contact page */
+  .contact-hero { padding: 40px 14px; }
+  .contact-hero p { font-size: 13px; }
+  .contact-body { padding: 24px 12px; gap: 16px; }
+  .contact-info-card { padding: 16px; }
+  .contact-form-card { padding: 16px; }
+
+  /* Pickup page */
+  .pickup-hero { padding: 40px 14px; }
+  .pickup-body { padding: 24px 12px; }
+  .pickup-card { padding: 16px; }
+  .pickup-note { padding: 12px 14px; }
+
+  /* Auth modal */
+  .auth-modal { padding: 24px 16px 20px; }
+  .auth-modal-title { font-size: 17px; }
+  .auth-modal-sub { font-size: 13px; margin-bottom: 16px; }
+  .auth-modal-logo { font-size: 20px; margin-bottom: 12px; }
+
+  /* My Bookings page */
+  .my-bookings-page { padding: 16px 10px 80px; }
+  .bookings-header { margin-bottom: 20px; }
+  .bookings-header h1 { font-size: 22px; }
+  .bookings-sub { font-size: 12px; }
+  .booking-card-header { padding: 12px 12px 8px; flex-wrap: wrap; gap: 6px; }
+  .booking-ref { font-size: 13px; }
+  .booking-items { padding: 8px 12px; }
+  .booking-card-footer { padding: 8px 12px; }
+  .booking-fulfilment { padding: 8px 12px; font-size: 12px; }
+  .booking-notes { padding: 8px 12px; }
+  .booking-feedback { padding: 10px 12px; }
+
+  /* Checkout page */
+  .checkout-page { padding: 10px 10px 50px; }
+  .checkout-order-card { padding: 12px; }
+  .payment-card-header { padding: 12px 14px 0; }
+  .payment-body { padding: 12px 14px 14px; }
+
+  /* Section generic */
+  .section { padding: 4px 10px 14px; }
+  .section-sub { font-size: 13px; }
+
+  /* Toast — keep above nav/chat button */
+  .toast { right: 12px; left: 12px; bottom: 80px; font-size: 13px; padding: 10px 14px; }
+}

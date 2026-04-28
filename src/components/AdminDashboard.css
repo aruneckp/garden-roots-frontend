@@ -2622,3 +2622,319 @@
     padding: 2px 6px;
   }
 }
+
+/* ============================================================
+   OrderEditModal — Tab bar
+   ============================================================ */
+.oem-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 0 20px;
+  background: #fff;
+}
+
+.oem-tab {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.oem-tab:hover {
+  color: #374151;
+}
+
+.oem-tab--active {
+  color: #16a34a;
+  border-bottom-color: #16a34a;
+  font-weight: 600;
+}
+
+/* ============================================================
+   OrderEditModal — Action History tab timeline  (.oem-ahl-*)
+   ============================================================ */
+@keyframes oem-mango-bounce {
+  0%, 100% { transform: translateY(0) rotate(-10deg) scale(1); }
+  30%       { transform: translateY(-12px) rotate(10deg) scale(1.15); }
+  60%       { transform: translateY(-5px) rotate(-5deg) scale(1.05); }
+}
+
+.oem-ahl-mango-spin {
+  font-size: 40px;
+  display: inline-block;
+  animation: oem-mango-bounce 1.2s ease-in-out infinite;
+  margin-bottom: 8px;
+}
+
+.oem-ahl-state {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.oem-ahl-error {
+  color: #dc2626;
+}
+
+.oem-ahl-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.oem-ahl-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.oem-ahl-event {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 18px;
+  position: relative;
+}
+
+.oem-ahl-event:last-child {
+  padding-bottom: 0;
+}
+
+.oem-ahl-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
+  position: relative;
+  z-index: 1;
+}
+
+.oem-ahl-card {
+  flex: 1;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+
+.oem-ahl-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.oem-ahl-icon  { font-size: 16px; }
+.oem-ahl-label { font-weight: 700; font-size: 14px; }
+.oem-ahl-time  { font-size: 12px; color: #6b7280; margin-left: auto; }
+
+.oem-ahl-by {
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+.oem-ahl-note {
+  font-size: 12px;
+  color: #b45309;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+}
+
+.oem-ahl-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.oem-ahl-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.oem-ahl-field  { font-weight: 600; color: #374151; min-width: 120px; text-transform: capitalize; }
+.oem-ahl-old    { color: #dc2626; text-decoration: line-through; background: #fef2f2; padding: 1px 6px; border-radius: 4px; }
+.oem-ahl-arrow  { color: #9ca3af; }
+.oem-ahl-new    { color: #16a34a; background: #f0fdf4; padding: 1px 6px; border-radius: 4px; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .oem-tabs {
+    padding: 0 12px;
+  }
+  .oem-tab {
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+  .oem-ahl-field {
+    min-width: 90px;
+  }
+}
+
+@media (max-width: 480px) {
+  .oem-tabs {
+    padding: 0 8px;
+  }
+  .oem-tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .oem-ahl-timeline::before {
+    left: 8px;
+  }
+  .oem-ahl-dot {
+    width: 18px;
+    height: 18px;
+  }
+  .oem-ahl-card {
+    padding: 8px 10px;
+  }
+  .oem-ahl-field {
+    min-width: 80px;
+  }
+}
+
+/* ============================================================
+   OrderEditModal — single-column body (Payment tab)
+   ============================================================ */
+.oem-body--single {
+  display: block;
+  overflow-y: auto;
+  padding: 0;
+}
+
+/* ============================================================
+   OrderEditModal — Payment tab  (.oem-payment-tab / .oem-pt-*)
+   ============================================================ */
+.oem-payment-tab {
+  padding: 24px 28px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+}
+
+.oem-radio-group {
+  display: flex;
+  gap: 24px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.oem-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  transition: border-color 0.15s, background 0.15s;
+  user-select: none;
+}
+
+.oem-radio-label:has(input:checked) {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.oem-radio-label input[type="radio"] {
+  accent-color: #16a34a;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.oem-radio-label--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #e5e7eb;
+  background: #f9fafb;
+  color: #9ca3af;
+}
+
+.oem-radio-label--disabled input[type="radio"] {
+  cursor: not-allowed;
+}
+
+.oem-radio-hint {
+  font-size: 11px;
+  color: #6b7280;
+  align-self: center;
+  font-style: italic;
+}
+
+.oem-pt-success {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.oem-pt-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Responsive: Payment tab */
+@media (max-width: 900px) {
+  .oem-payment-tab {
+    max-width: 100%;
+    padding: 20px;
+  }
+  .oem-radio-group {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .oem-payment-tab {
+    padding: 16px;
+  }
+  .oem-radio-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .oem-radio-label {
+    padding: 8px 12px;
+  }
+  .oem-pt-footer {
+    justify-content: stretch;
+  }
+  .oem-pt-footer .oem-save-btn {
+    width: 100%;
+  }
+}

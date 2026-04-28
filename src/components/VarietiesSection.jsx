@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { RiShoppingBasketLine } from 'react-icons/ri';
 import { useApp } from '../context/AppContext';
+import MangoLoader from './MangoLoader';
 
 function shuffle(arr) {
   const a = [...arr];
@@ -34,15 +35,7 @@ export default function VarietiesSection() {
         <div className="section-label">Our Collection</div>
         <h2 className="section-title">Mango Varieties</h2>
         <p className="section-sub">Each variety tells a story of its origin — a distinct personality, sweetness, and aroma.</p>
-        {loadingProducts && (
-          <div className="mango-loader">
-            <span className="mango-loader-emoji">🥭</span>
-            <div className="mango-loader-dots">
-              <span /><span /><span />
-            </div>
-            <div className="mango-loader-text">Loading varieties…</div>
-          </div>
-        )}
+        {loadingProducts && <MangoLoader text="Loading varieties…" />}
         {!loadingProducts && products.length === 0 && (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#dc2626' }}>Unable to load products. Please try again later.</div>
         )}
