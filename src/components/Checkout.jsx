@@ -246,10 +246,10 @@ export default function Checkout() {
   };
 
   const handlePayment = async () => {
-    const order = await handleCreateOrder();
-    if (!order) return;
-
     setPayState('processing');
+    const order = await handleCreateOrder();
+    if (!order) { setPayState('idle'); return; }
+
     try {
       const resp = await paymentApi.createPayment(
         displayTotal,
@@ -279,8 +279,9 @@ export default function Checkout() {
   };
 
   const handlePayLater = async () => {
+    setPayState('processing');
     const order = await handleCreateOrder();
-    if (!order) return;
+    if (!order) { setPayState('idle'); return; }
     setOrderRef(order.order_ref);
     setPayState('success');
   };
@@ -534,7 +535,7 @@ export default function Checkout() {
           {payState === 'processing' ? (
             <div className="payment-body">
               <div className="payment-processing">
-                <MangoLoader text="Verifying your payment…" />
+                <MangoLoader text={selectedPaymentMethod === 'pay_later' ? 'Confirming your order…' : 'Processing your payment…'} />
               </div>
             </div>
           ) : payState === 'failed' ? (
@@ -767,7 +768,7 @@ export default function Checkout() {
                         disabled={promoLoading || !promoInput.trim()}
                         style={{ padding: '10px 16px', borderRadius: 8, background: 'var(--green)', color: '#fff', border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        {promoLoading ? '…' : 'Apply'}
+                        {promoLoading ? 'Applying…' : 'Apply'}
                       </button>
                     </div>
                   )}
@@ -819,7 +820,7 @@ export default function Checkout() {
                 <div className="paynow-box">
                   <div className="paynow-logo"><span className="paynow-logo-dot" />PayNow</div>
                   <div className="paynow-amount">${displayTotal} SGD <span>to pay</span></div>
-                  <button className="btn-checkout" onClick={handlePayment}>
+                  <button className="btn-checkout" onClick={handlePayment} disabled={payState === 'processing'}>
                     Pay with PayNow via HitPay →
                   </button>
                 </div>
@@ -832,7 +833,7 @@ export default function Checkout() {
                   <div className="paynow-box" style={{ borderColor: '#f59e0b', background: '#fffbeb' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>💰</div>
                     <div className="paynow-amount">${displayTotal} SGD <span>to pay on delivery/collection</span></div>
-                    <button className="btn-checkout" style={{ background: '#d97706' }} onClick={handlePayLater}>
+                    <button className="btn-checkout" style={{ background: '#d97706' }} onClick={handlePayLater} disabled={payState === 'processing'}>
                       Confirm Order — Pay Later →
                     </button>
                   </div>

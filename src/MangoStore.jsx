@@ -18,11 +18,7 @@ import MyBookings from './components/MyBookings';
 import DeliveryPortal from './components/DeliveryPortal';
 
 const CTA_MESSAGES = [
-  'Complete Order in 30 secs',
-  '30 సెకన్లలో ఆర్డర్ పూర్తి చేయండి',
-  '30 விநாடிகளில் ஆர்டரை முடிக்கவும்',
-  '30 ಸೆಕೆಂಡ್‌ನಲ್ಲಿ ಆರ್ಡರ್ ಪೂರ್ಣಗೊಳಿಸಿ',
-  '30 सेकंड में ऑर्डर पूरा करें',
+  'Quick order in 30 secs',
 ];
 
 function StoreContent() {

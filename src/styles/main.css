@@ -331,6 +331,107 @@ body {
 .stat-pill strong { display: block; font-size: 18px; font-weight: 700; color: var(--mango); }
 .stat-pill span { font-size: 12px; opacity: 0.9; }
 
+/* ─── Hero Image Carousel ─────────────────────────────── */
+@keyframes heroFadeIn {
+  from { opacity: 0; transform: scale(1.03); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Carousel wrapper – height driven by whichever slide is active ── */
+.hero-carousel {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Fade-in animation on every slide change */
+.hero-carousel-slide {
+  width: 100%;
+  animation: heroFadeIn 0.65s ease forwards;
+}
+
+/* Image-type slides: use the banner's native 1024×572 ratio so nothing is cropped */
+.hero-slide-image {
+  width: 100%;
+  aspect-ratio: 1024 / 572;
+  background: #f5f0e8;
+  overflow: hidden;
+}
+
+.hero-carousel-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Prev / Next arrows */
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background: rgba(0,0,0,0.32);
+  border: 1.5px solid rgba(255,255,255,0.45);
+  color: #fff;
+  font-size: 36px;
+  line-height: 1;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  padding: 0;
+  padding-bottom: 3px;
+}
+.carousel-arrow:hover { background: rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.8); }
+.carousel-prev { left: 18px; }
+.carousel-next { right: 18px; }
+
+/* Navigation dots – white outline + shadow works on both light and dark slides */
+.hero-carousel-dots {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 9px;
+  z-index: 10;
+}
+
+.carousel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.22s, border-color 0.22s, transform 0.22s;
+}
+
+.carousel-dot.active {
+  background: var(--mango);
+  border-color: var(--mango);
+  transform: scale(1.35);
+}
+
+/* Responsive – tablet */
+@media (max-width: 900px) {
+  .carousel-arrow { width: 40px; height: 40px; font-size: 28px; }
+}
+
+/* Responsive – mobile */
+@media (max-width: 480px) {
+  .carousel-arrow { display: none; }
+  .carousel-dot { width: 8px; height: 8px; }
+  .hero-carousel-dots { bottom: 8px; gap: 6px; }
+}
+
 /* SECTION TITLES */
 /* ── Chatbot inline CTA strip ── */
 .chatbot-cta-strip {
@@ -1835,4 +1936,102 @@ body {
 
   /* Toast — keep above nav/chat button */
   .toast { right: 12px; left: 12px; bottom: 80px; font-size: 13px; padding: 10px 14px; }
+
+  /* Topbar */
+  .topbar { font-size: 11px; padding: 6px 10px; letter-spacing: 0.2px; }
+
+  /* Navigation */
+  .nav-inner { padding: 8px 12px; }
+  .logo { font-size: 18px; }
+  .nav-actions { gap: 6px; }
+
+  /* Hero locations box */
+  .hero-locations-box { padding: 10px 12px; gap: 7px; }
+  .hero-locations-heading { font-size: 14px; }
+  .hero-loc-chip { font-size: 11px; padding: 3px 8px; }
+
+  /* Why section */
+  .why-section { padding: 24px 12px; }
+  .why-card { padding: 10px 12px; gap: 10px; }
+  .why-icon { font-size: 20px; }
+  .why-card h3 { font-size: 13px; margin-bottom: 2px; }
+  .why-card p { font-size: 11px; }
+
+  /* Payment tabs — 3-column grid is cramped on narrow phones */
+  .payment-tab { font-size: 10px; padding: 8px 2px; }
+  .payment-tab-icon { font-size: 13px; margin-bottom: 1px; }
+
+  /* Checkout type toggle buttons */
+  .checkout-type-btn { font-size: 12px; padding: 8px 6px; }
+  .pickup-location-btn { font-size: 12px; padding: 6px 10px; }
+
+  /* Footer social links */
+  .social-link { width: 30px; height: 30px; font-size: 13px; }
+
+  /* About stats — keep 2-col but tighten numbers */
+  .about-stat strong { font-size: 26px; }
+
+  /* Chat FAB + CTA strip on very small screens */
+  .chat-fab { bottom: 12px; right: 12px; width: 46px; height: 46px; }
+  .chat-fab-img { width: 46px; height: 46px; }
+  .chatbot-cta-strip { left: 10px; right: 10px; bottom: 12px; padding: 6px 8px; gap: 6px; }
+
+  /* Stat pills (hero) — hidden at 768px so no change needed */
+
+  /* Booking card extra compaction */
+  .booking-card-header { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .booking-status { align-self: flex-start; }
+}
+
+/* ============================================================
+   VERY SMALL PHONES (≤ 360px) — iPhone SE, Galaxy A, etc.
+   ============================================================ */
+@media (max-width: 360px) {
+  .logo { font-size: 16px; }
+  .nav-inner { padding: 8px 10px; }
+  .nav-actions { gap: 4px; }
+  .btn-outline, .btn-primary { padding: 5px 7px; font-size: 11px; }
+
+  .hero-inner { padding: 4px 10px 6px; gap: 0; }
+  .hero h1 { font-size: 28px; }
+  .hero-locations-heading { font-size: 13px; }
+  .hero-loc-chip { font-size: 10px; padding: 2px 7px; }
+  .hero-buttons { gap: 7px; }
+  .btn-hero, .btn-hero-ghost { padding: 9px 14px; font-size: 11px; }
+
+  .section { padding: 4px 8px 12px; }
+
+  .varieties-grid { grid-template-columns: 1fr; gap: 10px; }
+  .vc-header { padding: 8px 10px; }
+  .vc-name { font-size: 13px; }
+  .vc-price { font-size: 16px; }
+  .vc-body { padding: 8px; gap: 6px; }
+  .vc-img-wrap { width: 72px; min-height: 66px; }
+  .vc-emoji { font-size: 34px; }
+
+  .why-card { padding: 8px 10px; gap: 8px; }
+  .why-icon { font-size: 18px; }
+  .why-card h3 { font-size: 12px; }
+  .why-card p { font-size: 10px; }
+
+  .cart-page { padding: 8px 8px 80px; }
+  .cart-summary-card { padding: 14px 10px; }
+
+  .checkout-page { padding: 8px 8px 50px; }
+  .payment-tab { font-size: 9px; }
+  .payment-tab-icon { font-size: 12px; }
+
+  .my-bookings-page { padding: 12px 8px 80px; }
+  .bookings-header h1 { font-size: 20px; }
+
+  .about-stat strong { font-size: 24px; }
+  .about-stat span { font-size: 11px; }
+
+  .contact-info-card, .contact-form-card { padding: 12px; }
+  .pickup-card { padding: 12px; }
+
+  .footer { padding: 20px 10px 60px; }
+  .social-link { width: 28px; height: 28px; font-size: 12px; }
+
+  .toast { font-size: 12px; padding: 8px 12px; bottom: 72px; }
 }

@@ -550,6 +550,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD' });
   const [addProductSaving, setAddProductSaving] = useState(false);
   const [addProductError, setAddProductError] = useState('');
+  // Display-order reordering state
+  const [localOrder, setLocalOrder] = useState([]);          // array of product ids in current display order
+  const [orderDirty, setOrderDirty] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   // Abandoned checkouts
   const [abandonedOrders, setAbandonedOrders] = useState([]);
@@ -659,10 +663,60 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       const res = await fetch(`${API_BASE}/api/v1/products`, { headers });
       if (res.ok) {
         const data = await res.json();
-        setAdminProducts(data.data || []);
+        const prods = data.data || [];
+        setAdminProducts(prods);
+        setLocalOrder(prods.map(p => p.id));
+        setOrderDirty(false);
       }
     } catch (_) {}
     setProductsLoading(false);
+  };
+
+  const handleSaveOrder = async () => {
+    setSavingOrder(true);
+    try {
+      const payload = localOrder.map((id, idx) => ({ id, display_order: idx + 1 }));
+      const res = await fetch(`${API_BASE}/api/v1/products/reorder`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const prods = data.data || [];
+        setAdminProducts(prods);
+        setLocalOrder(prods.map(p => p.id));
+        setOrderDirty(false);
+        showToast('success', 'Display order saved.');
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || b.error || errMsg; } catch (_) {}
+        showToast('error', `Failed to save order: ${errMsg}`);
+      }
+    } catch (err) {
+      showToast('error', `Failed to save order: ${err.message || 'Network error'}`);
+    }
+    setSavingOrder(false);
+  };
+
+  const moveProductUp = (index) => {
+    if (index === 0) return;
+    setLocalOrder(prev => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+    setOrderDirty(true);
+  };
+
+  const moveProductDown = (index) => {
+    setLocalOrder(prev => {
+      if (index === prev.length - 1) return prev;
+      const next = [...prev];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      return next;
+    });
+    setOrderDirty(true);
   };
 
   const showToast = (type, msg) => {
@@ -861,7 +915,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       if (filters.date_to) params.set('date_to', filters.date_to);
       if (filters.tag_id) params.set('tag_id', filters.tag_id);
       const res = await fetch(`${API_BASE}/api/v1/admin/orders?${params}`, { headers });
-      if (res.ok) setAllOrders(await res.json());
+      if (res.ok) setAllOrders((await res.json()).filter(o => o.order_status !== 'cancelled'));
     } catch (_) {}
     finally { setOrdersLoading(false); }
   };
@@ -2787,21 +2841,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 </div>
               ))}
 
-              {/* Secondary row: delivery boy, assigned, date range, clear */}
+              {/* Secondary row: tags, date range, clear */}
               <div className="orders-filter-row" style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10, marginTop: 4 }}>
-                <select value={orderFilters.delivery_boy_id} onChange={e => handleOrderFilterChange('delivery_boy_id', e.target.value)} className="orders-filter-select">
-                  <option value="">All Delivery Boys</option>
-                  {deliveryBoys.map(b => (
-                    <option key={b.id} value={b.id}>{b.full_name || b.username}</option>
-                  ))}
-                </select>
-
-                <select value={orderFilters.assigned} onChange={e => handleOrderFilterChange('assigned', e.target.value)} className="orders-filter-select">
-                  <option value="">Assigned — All</option>
-                  <option value="yes">Assigned</option>
-                  <option value="no">Unassigned</option>
-                </select>
-
                 <select value={orderFilters.tag_id} onChange={e => handleOrderFilterChange('tag_id', e.target.value)} className="orders-filter-select">
                   <option value="">All Tags</option>
                   <option value="untagged">🚫 Untagged</option>
@@ -2809,12 +2850,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     <option key={t.id} value={t.id}>🏷️ {t.name}</option>
                   ))}
                 </select>
-
-                <div className="orders-date-range">
-                  <input type="date" value={orderFilters.date_from} onChange={e => handleOrderFilterChange('date_from', e.target.value)} className="orders-date-input" title="From date" />
-                  <span className="date-range-sep">→</span>
-                  <input type="date" value={orderFilters.date_to} onChange={e => handleOrderFilterChange('date_to', e.target.value)} className="orders-date-input" title="To date" />
-                </div>
 
                 <button
                   className="orders-clear-btn"
@@ -2933,7 +2968,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     ...(orderColVisibility.delCode    ? ['Del. Code']   : []),
                     ...(orderColVisibility.shipment   ? ['Shipment']    : []),
                     ...(orderColVisibility.itemNames  ? ['Item Names']  : []),
-                    'Items', 'Total', 'Date',
+                    'Items', 'Promo Code', 'Discount', 'Total', 'Date',
                   ];
 
                   const rows = filtered.map(o => [
@@ -2953,6 +2988,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     ...(orderColVisibility.shipment   ? [o.shipment_id ? `#${o.shipment_id}` : ''] : []),
                     ...(orderColVisibility.itemNames  ? [(o.items || []).map(it => `${(it.variant || '').split(/[-–]/)[0].trim()} (${it.qty})`).join('; ')] : []),
                     o.items_count,
+                    o.promo_code || '',
+                    Number(o.discount_amount || 0) > 0 ? Number(o.discount_amount).toFixed(2) : '',
                     o.total_price,
                     o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '',
                   ]);
@@ -3119,7 +3156,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                         </tbody>
                                       </table>
                                       <div className="order-price-row">
-                                        <span>Delivery fee: ₹{o.delivery_fee}</span>
+                                        {o.delivery_fee && Number(o.delivery_fee) > 0 && (
+                                          <span>Delivery fee: ₹{o.delivery_fee}</span>
+                                        )}
+                                        {o.promo_code && Number(o.discount_amount) > 0 && (
+                                          <span style={{ color: '#16a34a' }}>
+                                            Promo ({o.promo_code}): −₹{Number(o.discount_amount).toFixed(2)}
+                                          </span>
+                                        )}
                                         <span>Total: <strong>₹{o.total_price}</strong></span>
                                       </div>
                                     </div>
@@ -3202,16 +3246,33 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
         {activeTab === 'manage' && manageSubTab === 'products' && (
           <div className="dashboard-section">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
               <h2 style={{ margin: 0 }}>🥭 Products</h2>
-              <button
-                className="submit-button"
-                style={{ padding: '8px 18px', fontSize: 13 }}
-                onClick={() => { setShowAddProduct(v => !v); setAddProductError(''); }}
-              >
-                {showAddProduct ? 'Cancel' : '+ Add Product'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {orderDirty && (
+                  <button
+                    className="submit-button"
+                    style={{ padding: '8px 18px', fontSize: 13, background: '#f59e0b', borderColor: '#f59e0b' }}
+                    disabled={savingOrder}
+                    onClick={handleSaveOrder}
+                  >
+                    {savingOrder ? 'Saving…' : '💾 Save Display Order'}
+                  </button>
+                )}
+                <button
+                  className="submit-button"
+                  style={{ padding: '8px 18px', fontSize: 13 }}
+                  onClick={() => { setShowAddProduct(v => !v); setAddProductError(''); }}
+                >
+                  {showAddProduct ? 'Cancel' : '+ Add Product'}
+                </button>
+              </div>
             </div>
+            {orderDirty && (
+              <p style={{ fontSize: 12, color: '#92400e', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, padding: '6px 12px', marginBottom: 12 }}>
+                Display order changed — click <strong>Save Display Order</strong> to apply on the home screen.
+              </p>
+            )}
 
             {showAddProduct && (
               <form onSubmit={handleAddProduct} style={{
@@ -3272,10 +3333,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             ) : adminProducts.length === 0 ? (
               <p style={{ color: '#6b7280' }}>No products found.</p>
             ) : (
+              <div style={{ overflowX: 'auto' }}>
               <table className="shipment-table">
                 <thead>
                   <tr>
-                    <th>#</th>
+                    <th>Order</th>
                     <th>Name</th>
                     <th>Origin</th>
                     <th>Price</th>
@@ -3284,13 +3346,45 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {adminProducts.map((product, idx) => {
+                  {localOrder.map((productId, idx) => {
+                    const product = adminProducts.find(p => p.id === productId);
+                    if (!product) return null;
                     const currentPrice = product.variants?.[0]?.price ?? null;
                     const editVal = editingPrices[product.id];
                     const isDirty = editVal !== undefined;
                     return (
                       <tr key={product.id}>
-                        <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{idx + 1}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontWeight: 700, color: '#6b7280', minWidth: 20, textAlign: 'center', fontSize: 13 }}>{idx + 1}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <button
+                                onClick={() => moveProductUp(idx)}
+                                disabled={idx === 0}
+                                title="Move up"
+                                style={{
+                                  width: 22, height: 18, padding: 0, border: '1px solid #d1d5db',
+                                  borderRadius: 4, background: idx === 0 ? '#f3f4f6' : '#fff',
+                                  color: idx === 0 ? '#d1d5db' : '#374151',
+                                  cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                  fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >▲</button>
+                              <button
+                                onClick={() => moveProductDown(idx)}
+                                disabled={idx === localOrder.length - 1}
+                                title="Move down"
+                                style={{
+                                  width: 22, height: 18, padding: 0, border: '1px solid #d1d5db',
+                                  borderRadius: 4, background: idx === localOrder.length - 1 ? '#f3f4f6' : '#fff',
+                                  color: idx === localOrder.length - 1 ? '#d1d5db' : '#374151',
+                                  cursor: idx === localOrder.length - 1 ? 'not-allowed' : 'pointer',
+                                  fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                              >▼</button>
+                            </div>
+                          </div>
+                        </td>
                         <td style={{ opacity: product.is_active ? 1 : 0.45 }}><strong>{product.name}</strong></td>
                         <td style={{ opacity: product.is_active ? 1 : 0.45 }}>{product.origin || '—'}</td>
                         <td>
@@ -3370,6 +3464,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}
