@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react';
-import { varieties as fallbackVarieties } from '../data/varieties';
+import { varieties as fallbackVarieties } from '../data/varieties'; // used only for local_names lookup
 import { getBotReply } from '../data/botReplies';
 import { productApi, authApi, orderApi, paymentApi, userApi, locationApi, API_BASE } from '../services/api';
 
@@ -216,27 +216,20 @@ export function AppProvider({ children }) {
           variantId: firstVariant?.id,
           name: product.name,
           price,
-          tag: product.tag || staticData.tag || 'Standard',
+          tag: product.tag || 'Standard',
           season: `${product.season_start || 'Jan'}–${product.season_end || 'Dec'}`,
-          origin: product.origin || staticData.origin || 'India',
-          desc: product.description || staticData.desc || 'Premium mango variety',
+          origin: product.origin || 'India',
+          desc: product.description || 'Premium mango variety',
           variants: product.variants,
-          emoji: staticData.emoji || '🥭',
-          image: staticData.image,
+          emoji: product.emoji || '🥭',
+          image: product.image_url || null,
           imgHeight: staticData.imgHeight || 130,
           original_price: null,
-          weight_approx: firstVariant?.box_weight != null ? `${firstVariant.box_weight}kg` : (staticData.weight_approx || null),
+          unit: firstVariant?.unit ?? null,
+          weight_approx: firstVariant?.box_weight != null ? `${firstVariant.box_weight}kg` : null,
           local_names: staticData.local_names || [],
           is_active: product.is_active ?? 1,
         };
-      });
-      const order = fallbackVarieties.map(v => v.name.toLowerCase());
-      transformedProducts.sort((a, b) => {
-        const ai = order.indexOf(a.name.toLowerCase());
-        const bi = order.indexOf(b.name.toLowerCase());
-        const ar = ai === -1 ? Infinity : ai;
-        const br = bi === -1 ? Infinity : bi;
-        return ar - br;
       });
       setProducts(transformedProducts);
     } catch (err) {

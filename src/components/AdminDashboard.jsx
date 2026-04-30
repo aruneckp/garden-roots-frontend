@@ -546,10 +546,21 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [editingPrices, setEditingPrices] = useState({});   // { [productId]: string }
   const [savingPriceId, setSavingPriceId] = useState(null);
   const [priceErrors, setPriceErrors] = useState({});       // { [productId]: string }
+  const [editingStocks, setEditingStocks] = useState({});   // { [productId]: string }
+  const [savingStockId, setSavingStockId] = useState(null);
+  const [stockErrors, setStockErrors] = useState({});       // { [productId]: string }
   const [showAddProduct, setShowAddProduct] = useState(false);
-  const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD' });
+  const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
   const [addProductSaving, setAddProductSaving] = useState(false);
   const [addProductError, setAddProductError] = useState('');
+  const [editingProduct, setEditingProduct] = useState(null); // product object being edited
+  const [editProductForm, setEditProductForm] = useState({});
+  const [editProductSaving, setEditProductSaving] = useState(false);
+  const [editProductError, setEditProductError] = useState('');
+  const [resetStockConfirm, setResetStockConfirm] = useState(null); // productId being confirmed
+  const [resetStockLoading, setResetStockLoading] = useState(null); // productId being reset
+  const [deleteProductConfirm, setDeleteProductConfirm] = useState(null); // productId being confirmed
+  const [deletingProductId, setDeletingProductId] = useState(null); // productId being deleted
   // Display-order reordering state
   const [localOrder, setLocalOrder] = useState([]);          // array of product ids in current display order
   const [orderDirty, setOrderDirty] = useState(false);
@@ -800,6 +811,36 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     setSavingPriceId(null);
   };
 
+  const handleUpdateStock = async (productId) => {
+    const raw = editingStocks[productId];
+    const qty = parseInt(raw, 10);
+    if (isNaN(qty) || qty < 0) return;
+    setSavingStockId(productId);
+    setStockErrors(prev => { const n = { ...prev }; delete n[productId]; return n; });
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/${productId}/stock`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ quantity_available: qty }),
+      });
+      if (res.ok) {
+        setEditingStocks(prev => { const n = { ...prev }; delete n[productId]; return n; });
+        await fetchAdminProducts();
+        showToast('success', `Stock updated to ${qty}.`);
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const body = await res.json(); errMsg = body.detail || body.error || errMsg; } catch (_) {}
+        setStockErrors(prev => ({ ...prev, [productId]: errMsg }));
+        showToast('error', `Stock save failed: ${errMsg}`);
+      }
+    } catch (err) {
+      const msg = err.message || 'Network error';
+      setStockErrors(prev => ({ ...prev, [productId]: msg }));
+      showToast('error', `Stock save failed: ${msg}`);
+    }
+    setSavingStockId(null);
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
     const price = parseFloat(addProductForm.price);
@@ -808,14 +849,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     setAddProductSaving(true);
     setAddProductError('');
     try {
+      const initial_stock = addProductForm.initial_stock !== '' ? parseInt(addProductForm.initial_stock, 10) : 0;
       const res = await fetch(`${API_BASE}/api/v1/products`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ...addProductForm, price }),
+        body: JSON.stringify({ ...addProductForm, price, initial_stock: isNaN(initial_stock) ? 0 : initial_stock }),
       });
       if (res.ok) {
         setShowAddProduct(false);
-        setAddProductForm({ name: '', origin: '', tag: '', description: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD' });
+        setAddProductForm({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
         await fetchAdminProducts();
         showToast('success', `Product "${addProductForm.name}" created.`);
       } else {
@@ -827,6 +869,97 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       setAddProductError(err.message || 'Network error');
     }
     setAddProductSaving(false);
+  };
+
+  const openEditProduct = (product) => {
+    setEditingProduct(product);
+    const firstVariant = product.variants?.[0];
+    setEditProductForm({
+      name: product.name || '',
+      origin: product.origin || '',
+      tag: product.tag || '',
+      description: product.description || '',
+      image_url: product.image_url || '',
+      emoji: product.emoji || '',
+      season_start: product.season_start || '',
+      season_end: product.season_end || '',
+      unit: firstVariant?.unit || '',
+      price: firstVariant?.price != null ? String(parseFloat(firstVariant.price)) : '',
+    });
+    setEditProductError('');
+    setShowAddProduct(false);
+  };
+
+  const handleSaveEditProduct = async (e) => {
+    e.preventDefault();
+    if (!editProductForm.name.trim()) { setEditProductError('Name is required.'); return; }
+    setEditProductSaving(true);
+    setEditProductError('');
+    try {
+      const payload = { ...editProductForm };
+      if (payload.price !== '' && payload.price != null) {
+        payload.price = parseFloat(payload.price);
+        if (isNaN(payload.price) || payload.price <= 0) { setEditProductError('Enter a valid price.'); setEditProductSaving(false); return; }
+      } else {
+        delete payload.price;
+      }
+      if (!payload.unit) delete payload.unit;
+      const res = await fetch(`${API_BASE}/api/v1/products/${editingProduct.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        await fetchAdminProducts();
+        showToast('success', `Product "${editProductForm.name}" updated.`);
+        setEditingProduct(null);
+      } else {
+        let msg = `Error ${res.status}`;
+        try { const b = await res.json(); msg = b.detail || b.error || msg; } catch (_) {}
+        setEditProductError(msg);
+      }
+    } catch (err) {
+      setEditProductError(err.message || 'Network error');
+    }
+    setEditProductSaving(false);
+  };
+
+  const handleResetStock = async (productId) => {
+    setResetStockLoading(productId);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/${productId}/reset-stock`, { method: 'POST', headers });
+      if (res.ok) {
+        showToast('success', 'Stock reset to 0.');
+        setResetStockConfirm(null);
+        await fetchAdminProducts();
+      } else {
+        let msg = `Error ${res.status}`;
+        try { const b = await res.json(); msg = b.detail || b.error || msg; } catch (_) {}
+        showToast('error', msg);
+      }
+    } catch (err) {
+      showToast('error', err.message || 'Network error');
+    }
+    setResetStockLoading(null);
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    setDeletingProductId(productId);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/products/${productId}`, { method: 'DELETE', headers });
+      if (res.ok) {
+        showToast('success', 'Product deleted.');
+        setDeleteProductConfirm(null);
+        await fetchAdminProducts();
+      } else {
+        let msg = `Error ${res.status}`;
+        try { const b = await res.json(); msg = b.detail || b.error || msg; } catch (_) {}
+        showToast('error', msg);
+      }
+    } catch (err) {
+      showToast('error', err.message || 'Network error');
+    }
+    setDeletingProductId(null);
   };
 
   const fetchDeliveryBoys = async () => {
@@ -3285,9 +3418,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     { label: 'Name *', key: 'name', placeholder: 'e.g. Kesar' },
                     { label: 'Origin', key: 'origin', placeholder: 'e.g. India' },
                     { label: 'Tag', key: 'tag', placeholder: 'e.g. premium' },
+                    { label: 'Emoji', key: 'emoji', placeholder: 'e.g. 🥭' },
                     { label: 'Size / Variant Name', key: 'size_name', placeholder: 'e.g. 5kg Box' },
                     { label: 'Unit', key: 'unit', placeholder: 'e.g. box' },
                     { label: 'Price (SGD) *', key: 'price', placeholder: 'e.g. 49.90', type: 'number' },
+                    { label: 'Initial Stock', key: 'initial_stock', placeholder: 'e.g. 50', type: 'number' },
                   ].map(({ label, key, placeholder, type }) => (
                     <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
                       {label}
@@ -3302,6 +3437,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       />
                     </label>
                   ))}
+                  <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                    Image URL
+                    <input
+                      type="text"
+                      placeholder="e.g. /kesar.jpg or https://…"
+                      value={addProductForm.image_url}
+                      onChange={e => setAddProductForm(prev => ({ ...prev, image_url: e.target.value }))}
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 13, fontWeight: 400 }}
+                    />
+                  </label>
                   <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
                     Description
                     <textarea
@@ -3328,6 +3473,81 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </form>
             )}
 
+            {editingProduct && (
+              <form onSubmit={handleSaveEditProduct} style={{
+                background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10,
+                padding: '20px 24px', marginBottom: 24, maxWidth: 600,
+              }}>
+                <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>Edit Product — {editingProduct.name}</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px' }}>
+                  {[
+                    { label: 'Name *', key: 'name', placeholder: 'e.g. Kesar' },
+                    { label: 'Origin', key: 'origin', placeholder: 'e.g. India' },
+                    { label: 'Tag', key: 'tag', placeholder: 'e.g. Premium' },
+                    { label: 'Emoji', key: 'emoji', placeholder: 'e.g. 🥭' },
+                    { label: 'Season Start', key: 'season_start', placeholder: 'e.g. Apr' },
+                    { label: 'Season End', key: 'season_end', placeholder: 'e.g. Jun' },
+                    { label: 'Unit', key: 'unit', placeholder: 'e.g. box' },
+                  ].map(({ label, key, placeholder }) => (
+                    <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                      {label}
+                      <input
+                        type="text"
+                        placeholder={placeholder}
+                        value={editProductForm[key]}
+                        onChange={e => setEditProductForm(prev => ({ ...prev, [key]: e.target.value }))}
+                        style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #93c5fd', fontSize: 13, fontWeight: 400 }}
+                      />
+                    </label>
+                  ))}
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                    Price
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="e.g. 29.90"
+                      value={editProductForm.price}
+                      onChange={e => setEditProductForm(prev => ({ ...prev, price: e.target.value }))}
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #93c5fd', fontSize: 13, fontWeight: 400 }}
+                    />
+                  </label>
+                  <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                    Image URL
+                    <input
+                      type="text"
+                      placeholder="e.g. /kesar.jpg or https://…"
+                      value={editProductForm.image_url}
+                      onChange={e => setEditProductForm(prev => ({ ...prev, image_url: e.target.value }))}
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #93c5fd', fontSize: 13, fontWeight: 400 }}
+                    />
+                  </label>
+                  <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                    Description
+                    <textarea
+                      rows={2}
+                      placeholder="Optional description"
+                      value={editProductForm.description}
+                      onChange={e => setEditProductForm(prev => ({ ...prev, description: e.target.value }))}
+                      style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #93c5fd', fontSize: 13, fontWeight: 400, resize: 'vertical', fontFamily: 'inherit' }}
+                    />
+                  </label>
+                </div>
+                {editProductError && (
+                  <p style={{ color: '#dc2626', fontSize: 12, margin: '10px 0 0', fontWeight: 600 }}>✕ {editProductError}</p>
+                )}
+                <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+                  <button type="submit" className="submit-button" style={{ padding: '8px 22px' }} disabled={editProductSaving}>
+                    {editProductSaving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button type="button" onClick={() => setEditingProduct(null)}
+                    style={{ padding: '8px 18px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
             {productsLoading ? (
               <p>⏳ Loading products...</p>
             ) : adminProducts.length === 0 ? (
@@ -3341,6 +3561,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     <th>Name</th>
                     <th>Origin</th>
                     <th>Price</th>
+                    <th>Stock</th>
                     <th>Status</th>
                     <th>Action</th>
                   </tr>
@@ -3352,6 +3573,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     const currentPrice = product.variants?.[0]?.price ?? null;
                     const editVal = editingPrices[product.id];
                     const isDirty = editVal !== undefined;
+                    const currentStock = product.variants?.[0]?.stock?.quantity_available ?? null;
+                    const stockEditVal = editingStocks[product.id];
+                    const isStockDirty = stockEditVal !== undefined;
                     return (
                       <tr key={product.id}>
                         <td style={{ whiteSpace: 'nowrap' }}>
@@ -3430,6 +3654,47 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </div>
                         </td>
                         <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={isStockDirty ? stockEditVal : (currentStock != null ? currentStock : '')}
+                                onChange={e => {
+                                  setEditingStocks(prev => ({ ...prev, [product.id]: e.target.value }));
+                                  setStockErrors(prev => { const n = { ...prev }; delete n[product.id]; return n; });
+                                }}
+                                onKeyDown={e => e.key === 'Enter' && isStockDirty && handleUpdateStock(product.id)}
+                                style={{
+                                  width: 62, padding: '4px 6px', borderRadius: 6,
+                                  border: `1.5px solid ${stockErrors[product.id] ? '#dc2626' : isStockDirty ? '#16a34a' : '#d1d5db'}`,
+                                  fontSize: 13, fontWeight: 600,
+                                }}
+                              />
+                              <button
+                                onClick={() => handleUpdateStock(product.id)}
+                                disabled={!isStockDirty || savingStockId === product.id}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 6, border: 'none',
+                                  background: isStockDirty ? '#16a34a' : '#e5e7eb',
+                                  color: isStockDirty ? '#fff' : '#9ca3af',
+                                  fontWeight: 700, fontSize: 12,
+                                  cursor: isStockDirty ? 'pointer' : 'not-allowed',
+                                  transition: 'background 0.2s',
+                                }}
+                              >
+                                {savingStockId === product.id ? '…' : 'Save'}
+                              </button>
+                            </div>
+                            {stockErrors[product.id] && (
+                              <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>
+                                ✕ {stockErrors[product.id]}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td>
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                             padding: '4px 10px', borderRadius: 100,
@@ -3446,18 +3711,74 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </span>
                         </td>
                         <td>
-                          <button
-                            onClick={() => handleToggleProductActive(product.id)}
-                            style={{
-                              padding: '5px 16px', borderRadius: 6, border: 'none',
-                              fontWeight: 700, fontSize: 12, letterSpacing: '0.05em',
-                              cursor: 'pointer',
-                              background: product.is_active ? '#dc2626' : '#16a34a',
-                              color: '#fff', transition: 'background 0.2s',
-                            }}
-                          >
-                            {togglingProductId === product.id ? '...' : product.is_active ? 'DISABLE' : 'ENABLE'}
-                          </button>
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button
+                              onClick={() => openEditProduct(product)}
+                              style={{
+                                padding: '5px 14px', borderRadius: 6, border: '1.5px solid #2563eb',
+                                fontWeight: 700, fontSize: 12, letterSpacing: '0.05em',
+                                cursor: 'pointer', background: editingProduct?.id === product.id ? '#2563eb' : '#fff',
+                                color: editingProduct?.id === product.id ? '#fff' : '#2563eb',
+                                transition: 'background 0.2s',
+                              }}
+                            >
+                              EDIT
+                            </button>
+                            <button
+                              onClick={() => handleToggleProductActive(product.id)}
+                              style={{
+                                padding: '5px 14px', borderRadius: 6, border: 'none',
+                                fontWeight: 700, fontSize: 12, letterSpacing: '0.05em',
+                                cursor: 'pointer',
+                                background: product.is_active ? '#dc2626' : '#16a34a',
+                                color: '#fff', transition: 'background 0.2s',
+                              }}
+                            >
+                              {togglingProductId === product.id ? '...' : product.is_active ? 'DISABLE' : 'ENABLE'}
+                            </button>
+                            {resetStockConfirm === product.id ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <button
+                                  onClick={() => handleResetStock(product.id)}
+                                  disabled={resetStockLoading === product.id}
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}
+                                >{resetStockLoading === product.id ? '…' : 'Confirm'}</button>
+                                <button
+                                  onClick={() => setResetStockConfirm(null)}
+                                  style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', fontSize: 11, cursor: 'pointer' }}
+                                >✕</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setResetStockConfirm(product.id)}
+                                style={{ padding: '5px 10px', borderRadius: 6, border: '1.5px solid #f59e0b', background: '#fff', color: '#b45309', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}
+                                title="Reset stock to 0"
+                              >
+                                🔄 Stock
+                              </button>
+                            )}
+                            {deleteProductConfirm === product.id ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <button
+                                  onClick={() => handleDeleteProduct(product.id)}
+                                  disabled={deletingProductId === product.id}
+                                  style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#7f1d1d', color: '#fff', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}
+                                >{deletingProductId === product.id ? '…' : 'Delete?'}</button>
+                                <button
+                                  onClick={() => setDeleteProductConfirm(null)}
+                                  style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', fontSize: 11, cursor: 'pointer' }}
+                                >✕</button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteProductConfirm(product.id)}
+                                style={{ padding: '5px 10px', borderRadius: 6, border: '1.5px solid #dc2626', background: '#fff', color: '#dc2626', fontWeight: 700, fontSize: 11, cursor: 'pointer' }}
+                                title="Permanently delete product"
+                              >
+                                🗑 Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

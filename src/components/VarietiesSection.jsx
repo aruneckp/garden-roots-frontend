@@ -55,6 +55,11 @@ export default function VarietiesSection() {
                         <div className="vc-weight">{v.weight_approx}</div>
                       )}
                     </div>
+                    {v.unit && (
+                      <div className="vc-unit-weight">
+                        {v.unit}{v.weight_approx ? <> <span className="vc-unit-or">or</span> {v.weight_approx}</> : null}
+                      </div>
+                    )}
                   </div>
                   <div className="vc-header-right">
                     {v.original_price && (

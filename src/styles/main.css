@@ -666,6 +666,17 @@ body {
   color: rgba(255,255,255,0.65);
   margin-top: 3px;
 }
+.vc-unit-weight {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.5);
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+}
+.vc-unit-or {
+  font-style: italic;
+  opacity: 0.75;
+}
 .vc-header-right {
   display: flex;
   flex-direction: row;
@@ -1343,6 +1354,7 @@ body {
   .vc-header { padding: 9px 13px 8px; gap: 7px; }
   .vc-name { font-size: 14px; }
   .vc-weight { font-size: 10px; }
+  .vc-unit-weight { font-size: 10px; margin-top: 2px; }
   .vc-old-price { font-size: 10px; }
   .vc-price { font-size: 18px; }
   .vc-body { gap: 8px; padding: 9px 10px 10px; }
@@ -2004,6 +2016,7 @@ body {
   .varieties-grid { grid-template-columns: 1fr; gap: 10px; }
   .vc-header { padding: 8px 10px; }
   .vc-name { font-size: 13px; }
+  .vc-unit-weight { font-size: 9px; margin-top: 2px; }
   .vc-price { font-size: 16px; }
   .vc-body { padding: 8px; gap: 6px; }
   .vc-img-wrap { width: 72px; min-height: 66px; }
