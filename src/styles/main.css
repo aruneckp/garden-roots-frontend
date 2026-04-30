@@ -353,14 +353,18 @@ body {
 /* Image-type slides: fill the full carousel width, matching the first banner */
 .hero-slide-image {
   width: 100%;
+  max-height: 60vh;
   background: #f5f0e8;
   overflow: hidden;
 }
 
 .hero-carousel-img {
   width: 100%;
-  height: auto;
+  height: 60vh;
+  max-height: 60vh;
   display: block;
+  object-fit: cover;
+  object-position: center;
 }
 
 /* Prev / Next arrows */
@@ -421,6 +425,8 @@ body {
 /* Responsive – tablet */
 @media (max-width: 900px) {
   .carousel-arrow { width: 40px; height: 40px; font-size: 28px; }
+  .hero-slide-image { max-height: 50vh; }
+  .hero-carousel-img { height: 50vh; max-height: 50vh; }
 }
 
 /* Responsive – mobile */
@@ -428,6 +434,8 @@ body {
   .carousel-arrow { display: none; }
   .carousel-dot { width: 8px; height: 8px; }
   .hero-carousel-dots { bottom: 8px; gap: 6px; }
+  .hero-slide-image { max-height: 40vh; }
+  .hero-carousel-img { height: 40vh; max-height: 40vh; }
 }
 
 /* SECTION TITLES */
@@ -1931,8 +1939,20 @@ body {
   .state-bar { padding: 10px 12px; }
   .state-bar-inner { flex-wrap: wrap; gap: 6px; font-size: 12px; }
 
-  /* Varieties: single column on narrow phones */
-  .varieties-grid { grid-template-columns: 1fr; gap: 12px; }
+  /* Varieties: 2-column grid on mobile — image stacks above text */
+  .varieties-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+  .vc-body { flex-direction: column; gap: 6px; padding: 8px 8px 10px; }
+  .vc-img-wrap { width: 100%; min-height: 140px; border-radius: 8px; }
+  .vc-header { padding: 8px 9px 7px; gap: 4px; }
+  .vc-name { font-size: 13px; }
+  .vc-price { font-size: 15px; }
+  .vc-old-price { font-size: 10px; }
+  .vc-weight { font-size: 9px; }
+  .vc-unit-weight { font-size: 9px; }
+  .vc-footer { padding: 7px 9px 8px; }
+  .vc-qty-btn { width: 25px; height: 25px; font-size: 16px; }
+  .vc-basket-wrap { width: 34px; height: 34px; }
+  .vc-basket-icon { width: 20px; height: 20px; }
 
   /* Newsletter */
   .newsletter { padding: 32px 14px; }
@@ -2079,13 +2099,13 @@ body {
 
   .section { padding: 4px 8px 12px; }
 
-  .varieties-grid { grid-template-columns: 1fr; gap: 10px; }
-  .vc-header { padding: 8px 10px; }
-  .vc-name { font-size: 13px; }
-  .vc-unit-weight { font-size: 9px; margin-top: 2px; }
-  .vc-price { font-size: 16px; }
-  .vc-body { padding: 8px; gap: 6px; }
-  .vc-img-wrap { width: 88px; min-height: 82px; }
+  .varieties-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .vc-body { flex-direction: column; gap: 4px; padding: 6px 6px 8px; }
+  .vc-img-wrap { width: 100%; min-height: 120px; border-radius: 6px; }
+  .vc-header { padding: 7px 8px; }
+  .vc-name { font-size: 12px; }
+  .vc-unit-weight { font-size: 8px; margin-top: 2px; }
+  .vc-price { font-size: 14px; }
   .vc-emoji { font-size: 34px; }
 
   .why-card { padding: 8px 10px; gap: 8px; }
