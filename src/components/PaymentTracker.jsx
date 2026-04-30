@@ -2,15 +2,28 @@ import { useState, useEffect } from 'react';
 import './AdminDashboard.css';
 import { API_BASE } from '../services/api';
 import MangoLoader from './MangoLoader';
+import {
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from 'recharts';
+
+const STATUS_COLORS = {
+  succeeded: '#10b981',
+  pending:   '#f59e0b',
+  failed:    '#ef4444',
+  cancelled: '#6b7280',
+  unknown:   '#a78bfa',
+};
 
 export default function PaymentTracker() {
   const [shipments, setShipments] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [paymentSummary, setPaymentSummary] = useState(null);
   const [pendingPayments, setPendingPayments] = useState(null);
+  const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentData, setPaymentData] = useState({
     shipment_box_id: '',
@@ -27,12 +40,29 @@ export default function PaymentTracker() {
   };
 
   useEffect(() => {
-    if (activeTab === 'pending') {
+    if (activeTab === 'dashboard') {
+      fetchDashboard();
+    } else if (activeTab === 'pending') {
       fetchPendingPayments();
     } else if (activeTab === 'by-shipment') {
       fetchShipments();
     }
   }, [activeTab]);
+
+  const fetchDashboard = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/api/v1/admin/payments/dashboard`, { headers });
+      if (!response.ok) throw new Error('Failed to fetch payment dashboard');
+      const data = await response.json();
+      setDashboardData(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchShipments = async () => {
     setLoading(true);
@@ -119,6 +149,7 @@ export default function PaymentTracker() {
         await fetchPaymentSummary(selectedShipment.id);
       }
       await fetchPendingPayments();
+      await fetchDashboard();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -135,6 +166,12 @@ export default function PaymentTracker() {
 
       <div className="admin-nav">
         <button
+          className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
+          onClick={() => setActiveTab('dashboard')}
+        >
+          📊 Dashboard
+        </button>
+        <button
           className={`nav-tab ${activeTab === 'pending' ? 'active' : ''}`}
           onClick={() => setActiveTab('pending')}
         >
@@ -147,6 +184,73 @@ export default function PaymentTracker() {
           📦 By Shipment
         </button>
       </div>
+
+      {activeTab === 'dashboard' && dashboardData && !loading && (
+        <div className="payment-dashboard-section">
+          <div className="dash-row" style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 20 }}>
+
+            {/* Payment Status Pie Chart */}
+            <div className="dash-chart-card" style={{ flex: '1 1 300px' }}>
+              <h3 className="dash-chart-title">Payment Status</h3>
+              {dashboardData.payment_status.length === 0 ? (
+                <p className="no-data">No order data.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie
+                      data={dashboardData.payment_status}
+                      dataKey="count"
+                      nameKey="status"
+                      cx="50%" cy="50%"
+                      innerRadius={60} outerRadius={95}
+                      paddingAngle={3}
+                      label={({ name, value }) => `${name}: ${value}`}
+                      labelLine={false}
+                    >
+                      {dashboardData.payment_status.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={STATUS_COLORS[entry.status] || '#60a5fa'}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(val, name) => [val, name]} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Payment Owners Bar Chart */}
+            <div className="dash-chart-card" style={{ flex: '1 1 300px' }}>
+              <h3 className="dash-chart-title">Payments by Owner</h3>
+              {dashboardData.payment_owners.length === 0 ? (
+                <p className="no-data">No owner data yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart
+                    data={dashboardData.payment_owners}
+                    margin={{ top: 8, right: 16, left: 0, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="owner"
+                      tick={{ fontSize: 11 }}
+                      angle={-35}
+                      textAnchor="end"
+                      interval={0}
+                    />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="count" name="Orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {activeTab === 'pending' && pendingPayments && !loading && (
         <div className="pending-payments-section">

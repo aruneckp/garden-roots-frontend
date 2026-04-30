@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { RiShoppingBasketLine } from 'react-icons/ri';
 import { useApp } from '../context/AppContext';
 import MangoLoader from './MangoLoader';
@@ -14,6 +14,14 @@ function shuffle(arr) {
 
 export default function VarietiesSection() {
   const { addToCart, updateQty, cart, products, loadingProducts, setPage } = useApp();
+  const [lightbox, setLightbox] = useState(null); // { src, name }
+
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = e => { if (e.key === 'Escape') setLightbox(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
 
   // Shuffle local_names once per product ID — stable across re-renders but
   // correctly populated after the async products load completes.
@@ -30,6 +38,7 @@ export default function VarietiesSection() {
   }, [products]);
 
   return (
+    <>
     <section className="section" id="varieties">
       <div className="section-inner">
         <div className="section-label">Our Collection</div>
@@ -72,7 +81,13 @@ export default function VarietiesSection() {
                 {/* ── Body: image + local names ── */}
                 <div className="vc-body">
                   <div className="vc-img-wrap">
-                    <img src={v.image || '/banginapalli.jpg'} alt={v.name} className="vc-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
+                    <img
+                      src={v.image || '/banginapalli.jpg'}
+                      alt={v.name}
+                      className="vc-img"
+                      onClick={e => { e.stopPropagation(); setLightbox({ src: v.image || '/banginapalli.jpg', name: v.name }); }}
+                      onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }}
+                    />
                   </div>
                   <div className="vc-local-names">
                     {shuffledNames[v.id]?.map((entry, i) => (
@@ -123,5 +138,16 @@ export default function VarietiesSection() {
         </div>
       </div>
     </section>
+
+    {lightbox && (
+      <div className="img-lightbox-overlay" onClick={() => setLightbox(null)}>
+        <div className="img-lightbox-box" onClick={e => e.stopPropagation()}>
+          <button className="img-lightbox-close" onClick={() => setLightbox(null)} aria-label="Close">✕</button>
+          <img src={lightbox.src} alt={lightbox.name} className="img-lightbox-img" onError={e => { e.currentTarget.src = '/banginapalli.jpg'; }} />
+          <div className="img-lightbox-name">{lightbox.name}</div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
