@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-
-const IMAGE_SLIDES = [
-  { src: '/Banner1.png', alt: 'Banner 1' },
-  { src: '/Banner2.png', alt: 'Banner 2' },
-];
+import IMAGE_SLIDES from 'virtual:banners';
 
 function OriginalHeroBanner({ setPage, pickupLocations, setFocusLocationId }) {
   const goToLocation = (id) => {

@@ -591,6 +591,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
+  const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
+  const [allOrdersSort, setAllOrdersSort] = useState({ col: null, dir: 'asc' });
+  const [summaryOrderDrill, setSummaryOrderDrill] = useState(null); // { loc, status } | null
 
   // Global toast — shared across all actions
   const [toast, setToast] = useState(null);                 // { type: 'success'|'error', msg: string }
@@ -3140,7 +3143,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               <MangoLoader text="Loading orders…" />
             ) : allOrders.length === 0 ? (
               <p style={{ color: '#6b7280', marginTop: 16 }}>No orders match the selected filters.</p>
-            ) : (
+            ) : (() => {
+              const toggleAllOrdersSort = col => setAllOrdersSort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+              const baseOrders = addressFilter
+                ? allOrders.filter(o => {
+                    const addr = o.delivery_type === 'pickup'
+                      ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                      : (o.delivery_address || '');
+                    return addr.trim() === addressFilter;
+                  })
+                : allOrders;
+              const sortableOrders = baseOrders.map(o => ({
+                ...o,
+                _location: o.delivery_type === 'pickup'
+                  ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                  : (o.delivery_address || ''),
+                _date: o.created_at || '',
+                total_price: Number(o.total_price) || 0,
+              }));
+              const sortedOrders = sortByCol(sortableOrders, allOrdersSort.col, allOrdersSort.dir);
+              return (
               <div style={{ overflowX: 'auto' }}>
                 <table className="shipment-table orders-table">
                   <thead>
@@ -3151,34 +3173,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           onChange={toggleSelectAllOrders}
                         />
                       </th>
-                      <th>Order Ref</th>
-                      <th>Customer</th>
-                      <th>Phone</th>
-                      <th>Mode</th>
-                      <th>Location / Address</th>
-                      <th>Order Status</th>
-                      <th>Payment</th>
-                      <th>Method</th>
-                      {orderColVisibility.tag        && <th>Tag</th>}
-                      {orderColVisibility.assignedTo && <th>Assigned To</th>}
-                      {orderColVisibility.delCode    && <th>Del. Code</th>}
-                      {orderColVisibility.shipment   && <th>Shipment</th>}
+                      <SortTh label="Order Ref" colKey="order_ref" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Customer" colKey="customer_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Phone" colKey="customer_phone" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Mode" colKey="delivery_type" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Location / Address" colKey="_location" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Order Status" colKey="order_status" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Payment" colKey="payment_status" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Method" colKey="payment_method" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      {orderColVisibility.tag        && <SortTh label="Tag" colKey="delivery_tag_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
+                      {orderColVisibility.assignedTo && <SortTh label="Assigned To" colKey="delivery_boy_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
+                      {orderColVisibility.delCode    && <SortTh label="Del. Code" colKey="delivery_code" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
+                      {orderColVisibility.shipment   && <SortTh label="Shipment" colKey="shipment_id" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.itemNames  && <th>Item Names</th>}
-                      <th>Items</th>
-                      <th>Total</th>
-                      <th>Date</th>
+                      <SortTh label="Items" colKey="items_count" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Total" colKey="total_price" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <SortTh label="Date" colKey="_date" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                     </tr>
                   </thead>
                   <tbody>
-                    {(addressFilter
-                      ? allOrders.filter(o => {
-                          const addr = o.delivery_type === 'pickup'
-                            ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
-                            : (o.delivery_address || '');
-                          return addr.trim() === addressFilter;
-                        })
-                      : allOrders
-                    ).map(o => {
+                    {sortedOrders.map(o => {
                       const isSelected = orderSelectedIds.includes(o.id);
                       const isExpanded = expandedOrderId === o.id;
                       return (
@@ -3369,10 +3383,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   </tbody>
                 </table>
                 <p style={{ color: '#6b7280', fontSize: 13, marginTop: 8 }}>
-                  Showing {allOrders.length} order(s) · {orderSelectedIds.length} selected
+                  Showing {sortedOrders.length} order(s) · {orderSelectedIds.length} selected
                 </p>
               </div>
-            )}
+              );
+            })()}
             </>)}
           </div>
         )}
@@ -3953,15 +3968,36 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {summaryRows.map(r => (
-                              <tr key={r.loc}>
-                                <td className="report-loc-name">{r.loc}</td>
-                                {ALL_STATUSES.map(st => (
-                                  <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>{r[st]}</td>
-                                ))}
-                                <td className="report-row-total">{r.total}</td>
-                              </tr>
-                            ))}
+                            {summaryRows.map(r => {
+                              const isDrillRow = summaryOrderDrill && summaryOrderDrill.loc === r.loc;
+                              return (
+                                <tr key={r.loc} className={isDrillRow ? 'type-row-drilled' : ''}>
+                                  <td className="report-loc-name">{r.loc}</td>
+                                  {ALL_STATUSES.map(st => (
+                                    <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>
+                                      {r[st] ? (
+                                        <button
+                                          className={`type-count-btn${isDrillRow && summaryOrderDrill.status === st ? ' active' : ''}`}
+                                          onClick={() => setSummaryOrderDrill(
+                                            isDrillRow && summaryOrderDrill.status === st ? null : { loc: r.loc, status: st }
+                                          )}
+                                        >{r[st]}</button>
+                                      ) : 0}
+                                    </td>
+                                  ))}
+                                  <td className="report-row-total">
+                                    {r.total ? (
+                                      <button
+                                        className={`type-count-btn${isDrillRow && summaryOrderDrill.status === 'total' ? ' active' : ''}`}
+                                        onClick={() => setSummaryOrderDrill(
+                                          isDrillRow && summaryOrderDrill.status === 'total' ? null : { loc: r.loc, status: 'total' }
+                                        )}
+                                      >{r.total}</button>
+                                    ) : 0}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
@@ -3975,6 +4011,67 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tfoot>
                         </table>
                       </div>
+
+                      {summaryOrderDrill && (() => {
+                        const { loc, status } = summaryOrderDrill;
+                        const drillOrders = filteredByShipment.filter(o => {
+                          const oLoc = o.delivery_type === 'pickup'
+                            ? (o.pickup_location_name || `Location #${o.pickup_location_id}`)
+                            : 'Home Delivery';
+                          if (oLoc !== loc) return false;
+                          if (status === 'total') return true;
+                          return o.order_status === status;
+                        });
+                        const statusLabel = status === 'total' ? 'All Statuses' : STATUS_LABELS[status];
+                        return (
+                          <div className="type-drill-panel">
+                            <div className="type-drill-header">
+                              <span><strong>{loc}</strong> — {statusLabel} · {drillOrders.length} order{drillOrders.length !== 1 ? 's' : ''}</span>
+                              <button className="type-drill-close" onClick={() => setSummaryOrderDrill(null)}>✕ Close</button>
+                            </div>
+                            {drillOrders.length === 0 ? (
+                              <p style={{ color: '#9ca3af', padding: '12px 0' }}>No orders found.</p>
+                            ) : (
+                              <div style={{ overflowX: 'auto' }}>
+                                <table className="shipment-table orders-table" style={{ marginTop: 0 }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Order Ref</th>
+                                      <th>Customer</th>
+                                      <th>Status</th>
+                                      <th>Items</th>
+                                      <th>Total</th>
+                                      <th>Mode</th>
+                                      <th>Date</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {drillOrders.map(o => {
+                                      const allItemsSummary = (o.items || []).map(it => `${it.variant} ×${it.qty}`).join(', ');
+                                      const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString() : '—';
+                                      return (
+                                        <tr key={o.id}>
+                                          <td><strong>{o.order_ref}</strong></td>
+                                          <td>{o.customer_name}</td>
+                                          <td>
+                                            <span className={`status-badge status-${o.order_status}`}>
+                                              {STATUS_LABELS[o.order_status] || o.order_status}
+                                            </span>
+                                          </td>
+                                          <td style={{ fontSize: 12, maxWidth: 220, whiteSpace: 'normal', lineHeight: 1.4 }}>{allItemsSummary}</td>
+                                          <td>${o.total_price}</td>
+                                          <td>{o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}</td>
+                                          <td style={{ fontSize: 12, color: '#6b7280' }}>{dateStr}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       </>
                     );
                   })()}
@@ -4041,16 +4138,46 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {typeRows.map(r => (
-                              <tr key={r.name}>
-                                <td className="report-loc-name">{r.name}</td>
-                                {ALL_STATUSES.map(st => (
-                                  <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>{r[st]}</td>
-                                ))}
-                                <td className="report-row-total">{r.total}</td>
-                                <td className="report-row-total" style={{ color: '#16a34a' }}>{r.valid}</td>
-                              </tr>
-                            ))}
+                            {typeRows.map(r => {
+                              const isDrillRow = typeOrderDrill && typeOrderDrill.variantName === r.name;
+                              return (
+                                <tr key={r.name} className={isDrillRow ? 'type-row-drilled' : ''}>
+                                  <td className="report-loc-name">{r.name}</td>
+                                  {ALL_STATUSES.map(st => (
+                                    <td key={st} className={`report-count${r[st] ? '' : ' zero'}`}>
+                                      {r[st] ? (
+                                        <button
+                                          className={`type-count-btn${isDrillRow && typeOrderDrill.status === st ? ' active' : ''}`}
+                                          onClick={() => setTypeOrderDrill(
+                                            isDrillRow && typeOrderDrill.status === st ? null : { variantName: r.name, status: st }
+                                          )}
+                                        >{r[st]}</button>
+                                      ) : 0}
+                                    </td>
+                                  ))}
+                                  <td className="report-row-total">
+                                    {r.total ? (
+                                      <button
+                                        className={`type-count-btn${isDrillRow && typeOrderDrill.status === 'total' ? ' active' : ''}`}
+                                        onClick={() => setTypeOrderDrill(
+                                          isDrillRow && typeOrderDrill.status === 'total' ? null : { variantName: r.name, status: 'total' }
+                                        )}
+                                      >{r.total}</button>
+                                    ) : 0}
+                                  </td>
+                                  <td className="report-row-total" style={{ color: '#16a34a' }}>
+                                    {r.valid ? (
+                                      <button
+                                        className={`type-count-btn green${isDrillRow && typeOrderDrill.status === 'valid' ? ' active' : ''}`}
+                                        onClick={() => setTypeOrderDrill(
+                                          isDrillRow && typeOrderDrill.status === 'valid' ? null : { variantName: r.name, status: 'valid' }
+                                        )}
+                                      >{r.valid}</button>
+                                    ) : 0}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
@@ -4069,6 +4196,75 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tfoot>
                         </table>
                       </div>
+
+                      {typeOrderDrill && (() => {
+                        const { variantName, status } = typeOrderDrill;
+                        const validStatuses = ['confirmed', 'shipped', 'delivered'];
+                        const drillOrders = filteredByShipment.filter(o => {
+                          if (!(o.items || []).some(it => it.variant === variantName)) return false;
+                          if (status === 'total') return true;
+                          if (status === 'valid') return validStatuses.includes(o.order_status);
+                          return o.order_status === status;
+                        });
+                        const statusLabel = status === 'total'
+                          ? 'All Statuses'
+                          : status === 'valid'
+                            ? 'Valid (Confirmed + Shipped + Delivered)'
+                            : STATUS_LABELS[status];
+                        return (
+                          <div className="type-drill-panel">
+                            <div className="type-drill-header">
+                              <span><strong>{variantName}</strong> — {statusLabel} · {drillOrders.length} order{drillOrders.length !== 1 ? 's' : ''}</span>
+                              <button className="type-drill-close" onClick={() => setTypeOrderDrill(null)}>✕ Close</button>
+                            </div>
+                            {drillOrders.length === 0 ? (
+                              <p style={{ color: '#9ca3af', padding: '12px 0' }}>No orders found.</p>
+                            ) : (
+                              <div style={{ overflowX: 'auto' }}>
+                                <table className="shipment-table orders-table" style={{ marginTop: 0 }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Order Ref</th>
+                                      <th>Customer</th>
+                                      <th>Status</th>
+                                      <th>Qty ({variantName})</th>
+                                      <th>All Items</th>
+                                      <th>Total</th>
+                                      <th>Type</th>
+                                      <th>Date</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {drillOrders.map(o => {
+                                      const variantQty = (o.items || [])
+                                        .filter(it => it.variant === variantName)
+                                        .reduce((s, it) => s + (it.qty || 0), 0);
+                                      const allItemsSummary = (o.items || []).map(it => `${it.variant} ×${it.qty}`).join(', ');
+                                      const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString() : '—';
+                                      return (
+                                        <tr key={o.id}>
+                                          <td><strong>{o.order_ref}</strong></td>
+                                          <td>{o.customer_name}</td>
+                                          <td>
+                                            <span className={`status-badge status-${o.order_status}`}>
+                                              {STATUS_LABELS[o.order_status] || o.order_status}
+                                            </span>
+                                          </td>
+                                          <td><strong>{variantQty}</strong></td>
+                                          <td style={{ fontSize: 12, maxWidth: 220, whiteSpace: 'normal', lineHeight: 1.4 }}>{allItemsSummary}</td>
+                                          <td>${o.total_price}</td>
+                                          <td>{o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}</td>
+                                          <td style={{ fontSize: 12, color: '#6b7280' }}>{dateStr}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       </>
                     );
                   })()}
