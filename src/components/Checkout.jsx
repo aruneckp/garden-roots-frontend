@@ -63,9 +63,10 @@ export default function Checkout() {
   // Notes
   const [customerNotes, setCustomerNotes] = useState('');
 
-  // Snapshot of cart items and total captured at confirmation time (cart is cleared on confirm)
+  // Snapshot of cart items, total, and delivery fee captured at confirmation time (cart is cleared on confirm)
   const [confirmedItems, setConfirmedItems] = useState([]);
   const [confirmedDisplayTotal, setConfirmedDisplayTotal] = useState(null);
+  const [confirmedDeliveryFee, setConfirmedDeliveryFee] = useState(null);
 
   // Payment method — admins can choose Pay Later for phone orders
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paynow');
@@ -291,6 +292,7 @@ export default function Checkout() {
     if (payState === 'success') {
       setConfirmedItems(cart);
       setConfirmedDisplayTotal(displayTotal);
+      setConfirmedDeliveryFee(displayDelivery);
       setCart([]);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -346,6 +348,14 @@ export default function Checkout() {
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 14, color: '#16A34A', fontWeight: 600 }}>
               <span>🎉 Promo ({promoApplied.code}) saved you</span>
               <span>−${Number(promoApplied.discount_amount).toFixed(2)}</span>
+            </div>
+          )}
+          {confirmedDeliveryFee != null && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 14, color: '#374151' }}>
+              <span>🚚 Delivery</span>
+              <span style={{ fontWeight: 600, color: confirmedDeliveryFee === 0 ? '#16A34A' : '#374151' }}>
+                {confirmedDeliveryFee === 0 ? (deliveryType === 'pickup' ? 'Free (Self-Collection)' : 'Free 🎉') : `$${confirmedDeliveryFee.toFixed(2)}`}
+              </span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontWeight: 700, fontSize: 16, color: 'var(--dark)' }}>

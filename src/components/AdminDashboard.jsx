@@ -592,6 +592,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
   const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
+  const [dsShowPhone, setDsShowPhone] = useState(true);
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
   const [allOrdersSort, setAllOrdersSort] = useState({ col: null, dir: 'asc' });
@@ -2073,17 +2074,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             {/* ── Delivery sub-tab nav ── */}
             <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
               <button
-                className={`manage-sub-tab${deliverySubTab === 'boys' ? ' active' : ''}`}
-                onClick={() => { setDeliverySubTab('boys'); fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }}
-              >🛵 Delivery Boys</button>
+                className={`manage-sub-tab${deliverySubTab === 'delivery-sheet' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('delivery-sheet'); fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }}
+              >📋 Delivery Sheet</button>
               <button
                 className={`manage-sub-tab${deliverySubTab === 'tags' ? ' active' : ''}`}
                 onClick={() => { setDeliverySubTab('tags'); fetchDeliveryTags(); }}
               >🏷️ Tags</button>
               <button
-                className={`manage-sub-tab${deliverySubTab === 'delivery-sheet' ? ' active' : ''}`}
-                onClick={() => { setDeliverySubTab('delivery-sheet'); fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }}
-              >📋 Delivery Sheet</button>
+                className={`manage-sub-tab${deliverySubTab === 'boys' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('boys'); fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }}
+              >🛵 Delivery Boys</button>
             </div>
 
             {/* ── Tags tab ── */}
@@ -2556,7 +2557,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
                   : o.delivery_address.trim();
                 const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
-                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: type === 'Home Delivery' ? extractPostal(addr) : '', _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null };
+                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: extractPostal(addr), _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null };
                 (o.items || []).forEach(it => {
                   const v = stripStd(it.variant);
                   if (v) addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
@@ -2687,6 +2688,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     {shipmentsWithOrders.map(s => (
                       <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => { setSelectedReportShipment(s.id); setDsAddressFilter(null); }}>{s.shipment_ref}</button>
                     ))}
+                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={dsShowPhone}
+                        onChange={e => setDsShowPhone(e.target.checked)}
+                      />
+                      Show Phone
+                    </label>
                   </div>
 
                   {/* ── Address drill-down ── */}
@@ -2869,9 +2879,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       )}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
-                          const hdrs = ['Tag', 'Address / Collection Point', 'Postal', 'Type', 'Customer', 'Phone', ...allVariants, 'Total'];
-                          const rows = deliveryRows.map(r => [r.tagName || '', r.addr, r.postal || '', r.type, r.name, r.phone, ...allVariants.map(v => r[v] || 0), r.total]);
-                          rows.push(['', 'TOTAL', '', '', '', '', ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
+                          const hdrs = ['Tag', 'Address / Collection Point', 'Postal', 'Type', 'Customer', ...(dsShowPhone ? ['Phone'] : []), ...allVariants, 'Total'];
+                          const rows = deliveryRows.map(r => [r.tagName || '', r.addr, r.postal || '', r.type, r.name, ...(dsShowPhone ? [r.phone] : []), ...allVariants.map(v => r[v] || 0), r.total]);
+                          rows.push(['', 'TOTAL', '', '', '', ...(dsShowPhone ? [''] : []), ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
                           downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
@@ -2895,7 +2905,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
                               <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
                               <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
-                              <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />
+                              {dsShowPhone && <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />}
                               {allVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
                               <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
                             </tr>
@@ -2933,7 +2943,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                   <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7', color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d' }}>{r.type}</span>
                                 </td>
                                 <td style={{ fontSize: 12 }}>{r.name}</td>
-                                <td style={{ fontSize: 12 }}>{r.phone}</td>
+                                {dsShowPhone && <td style={{ fontSize: 12 }}>{r.phone}</td>}
                                 {allVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
                                 <td className="report-row-total">{r.total}</td>
                               </tr>
@@ -2942,7 +2952,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
-                              <td colSpan={7}><strong>Total</strong></td>
+                              <td colSpan={dsShowPhone ? 7 : 6}><strong>Total</strong></td>
                               {allVariants.map(v => {
                                 const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
