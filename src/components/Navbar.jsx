@@ -51,9 +51,13 @@ export default function Navbar() {
 
   return (
     <>
-      <div className="topbar" style={{ overflow: 'hidden' }}>
+      <div className="topbar">
         <span style={{
           display: 'inline-block',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          verticalAlign: 'middle',
           transition: bannerVisible
             ? 'opacity 0.7s ease, transform 0.7s ease'
             : 'opacity 0.2s ease, transform 0.2s ease',
