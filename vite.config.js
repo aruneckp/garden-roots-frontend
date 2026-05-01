@@ -6,6 +6,16 @@ import react from '@vitejs/plugin-react';
 function bannerScannerPlugin() {
   const VIRTUAL_ID = 'virtual:banners';
   const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+
+  function scan() {
+    const publicDir = path.resolve(process.cwd(), 'public');
+    return fs.readdirSync(publicDir)
+      .filter(f => f.startsWith('Banner') && IMAGE_RE.test(f))
+      .sort()
+      .map(f => ({ src: `/${f}`, alt: f.replace(/\.[^.]+$/, '') }));
+  }
+
   return {
     name: 'banner-scanner',
     resolveId(id) {
@@ -13,12 +23,21 @@ function bannerScannerPlugin() {
     },
     load(id) {
       if (id !== RESOLVED_ID) return;
+      return `export default ${JSON.stringify(scan())};`;
+    },
+    configureServer(server) {
       const publicDir = path.resolve(process.cwd(), 'public');
-      const banners = fs.readdirSync(publicDir)
-        .filter(f => f.startsWith('Banner') && /\.(png|jpe?g|webp)$/i.test(f))
-        .sort()
-        .map(f => ({ src: `/${f}`, alt: f.replace(/\.[^.]+$/, '') }));
-      return `export default ${JSON.stringify(banners)};`;
+      const invalidate = (filePath) => {
+        if (path.dirname(filePath) !== publicDir) return;
+        const base = path.basename(filePath);
+        if (!base.startsWith('Banner') || !IMAGE_RE.test(base)) return;
+        const mod = server.moduleGraph.getModuleById(RESOLVED_ID);
+        if (mod) server.moduleGraph.invalidateModule(mod);
+        server.ws.send({ type: 'full-reload' });
+      };
+      server.watcher.add(publicDir);
+      server.watcher.on('add', invalidate);
+      server.watcher.on('unlink', invalidate);
     },
   };
 }

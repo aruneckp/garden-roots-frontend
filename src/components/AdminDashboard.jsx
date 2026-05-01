@@ -6,6 +6,7 @@ import PromoManager from './PromoManager';
 import MangoLoader from './MangoLoader';
 import { API_BASE } from '../services/api';
 import { useApp } from '../context/AppContext';
+import ALL_BANNERS from 'virtual:banners';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -476,9 +477,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [allOrders, setAllOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orderFilters, setOrderFilters] = useState({
-    delivery_type: '', payment_status: '', order_status: '',
-    pickup_location_id: '', delivery_boy_id: '', assigned: '',
-    payment_method: '', date_from: '', date_to: '', tag_id: '',
+    delivery_type: [], payment_status: [], order_status: [],
+    pickup_location_id: [], delivery_boy_id: '', assigned: '',
+    payment_method: [], date_from: '', date_to: '', tag_id: '',
   });
   const [activeFilters, setActiveFilters] = useState({
     delivery_type: false,
@@ -590,6 +591,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkStatus, setDsOrderBulkStatus] = useState('');
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
+  const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
   const [allOrdersSort, setAllOrdersSort] = useState({ col: null, dir: 'asc' });
@@ -602,6 +604,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [bannerMessages, setBannerMessages] = useState('');
   const [configSaving, setConfigSaving] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
+
+  // Ads tab state
+  const [bannerStatuses, setBannerStatuses] = useState({});
+  const [adsSaving, setAdsSaving] = useState(null);      // filename being toggled
+  const [uploadedBanners, setUploadedBanners] = useState([]); // srcs from DB
+  const [adsUploadFile, setAdsUploadFile] = useState(null);
+  const [adsUploadPreview, setAdsUploadPreview] = useState(null);
+  const [adsUploading, setAdsUploading] = useState(false);
+  const [deletingBanner, setDeletingBanner] = useState(null); // filename being deleted
 
 
   const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
@@ -637,7 +648,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchAssignedOrders();
       fetchNullShipmentCount();
       fetchDeliveryTags();
-      if (shipments.length === 0) fetchShipments();
+      fetchShipments();
       fetchReportOrders();
     }
   }, [activeTab]);
@@ -650,8 +661,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       fetchDeliveryBoys();
       fetchDeliveryTags();
       fetchReportOrders();
-      if (shipments.length === 0) fetchShipments();
-      if (adminProducts.length === 0) fetchAdminProducts();
+      fetchShipments();
+      fetchAdminProducts();
     }
   }, [activeTab]);
 
@@ -669,6 +680,53 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         .catch(() => {});
     }
   }, [activeTab, manageSubTab]);
+
+  useEffect(() => {
+    if (activeTab === 'manage' && manageSubTab === 'ads') {
+      fetch(`${API_BASE}/api/v1/config`)
+        .then(r => r.json())
+        .then(json => {
+          try { setBannerStatuses(JSON.parse(json.data?.banner_statuses || '{}')); }
+          catch (_) { setBannerStatuses({}); }
+          try { setUploadedBanners(JSON.parse(json.data?.uploaded_banners || '[]')); }
+          catch (_) { setUploadedBanners([]); }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab, manageSubTab]);
+
+  // Re-fetch whenever a delivery sub-tab is selected
+  useEffect(() => {
+    if (activeTab !== 'delivery') return;
+    if (deliverySubTab === 'delivery-sheet') { fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }
+    if (deliverySubTab === 'boys') { fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }
+    if (deliverySubTab === 'tags') fetchDeliveryTags();
+  }, [deliverySubTab]);
+
+  // Re-fetch whenever a reports sub-tab is selected
+  useEffect(() => {
+    if (activeTab !== 'reports') return;
+    if (reportSubTab === 'all-orders') { fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations(); }
+    if (reportSubTab === 'orders-summary' || reportSubTab === 'orders-by-type') { fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }
+  }, [reportSubTab]);
+
+  // Re-fetch active tab data when the browser tab regains visibility
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (activeTab === 'delivery') {
+        fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders();
+        fetchNullShipmentCount(); fetchDeliveryTags(); fetchShipments(); fetchReportOrders();
+      } else if (activeTab === 'reports') {
+        fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations();
+        fetchDeliveryBoys(); fetchDeliveryTags(); fetchReportOrders(); fetchShipments();
+      } else if (activeTab === 'dashboard') {
+        fetchDashboard();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [activeTab]);
 
 
   const fetchAdminProducts = async () => {
@@ -757,6 +815,90 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       showToast('error', `Failed to save banner: ${err.message || 'Network error'}`);
     }
     setConfigSaving(false);
+  };
+
+  const handleToggleBannerStatus = async (filename) => {
+    const current = bannerStatuses[filename] !== false;
+    const next = !current;
+    const updated = { ...bannerStatuses, [filename]: next };
+    setBannerStatuses(updated);
+    setAdsSaving(filename);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/config/banner_statuses`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ config_value: JSON.stringify(updated) }),
+      });
+      if (res.ok) {
+        showToast('success', `${filename} ${next ? 'enabled' : 'disabled'}.`);
+      } else {
+        setBannerStatuses(bannerStatuses);
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || b.error || errMsg; } catch (_) {}
+        showToast('error', `Failed to update: ${errMsg}`);
+      }
+    } catch (err) {
+      setBannerStatuses(bannerStatuses);
+      showToast('error', `Failed to update: ${err.message || 'Network error'}`);
+    }
+    setAdsSaving(null);
+  };
+
+  const handleAdsFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAdsUploadFile(file);
+    setAdsUploadPreview(URL.createObjectURL(file));
+  };
+
+  const handleUploadBanner = async () => {
+    if (!adsUploadFile) return;
+    setAdsUploading(true);
+    const formData = new FormData();
+    formData.append('file', adsUploadFile);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/banners/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const newSrc = json.data.src;
+        setUploadedBanners(prev => [...prev.filter(s => s !== newSrc), newSrc]);
+        setAdsUploadFile(null);
+        setAdsUploadPreview(null);
+        showToast('success', `${json.data.filename} uploaded successfully.`);
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || errMsg; } catch (_) {}
+        showToast('error', `Upload failed: ${errMsg}`);
+      }
+    } catch (err) {
+      showToast('error', `Upload failed: ${err.message || 'Network error'}`);
+    }
+    setAdsUploading(false);
+  };
+
+  const handleDeleteUploadedBanner = async (filename) => {
+    setDeletingBanner(filename);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/banners/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        setUploadedBanners(prev => prev.filter(s => s !== `/${filename}`));
+        showToast('success', `${filename} deleted.`);
+      } else {
+        let errMsg = `Error ${res.status}`;
+        try { const b = await res.json(); errMsg = b.detail || errMsg; } catch (_) {}
+        showToast('error', `Delete failed: ${errMsg}`);
+      }
+    } catch (err) {
+      showToast('error', `Delete failed: ${err.message || 'Network error'}`);
+    }
+    setDeletingBanner(null);
   };
 
   const handleToggleProductActive = async (productId) => {
@@ -1040,18 +1182,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     setBulkResult(null);
     try {
       const params = new URLSearchParams();
-      if (filters.delivery_type) params.set('delivery_type', filters.delivery_type);
-      if (filters.payment_status) params.set('payment_status', filters.payment_status);
-      if (filters.order_status) params.set('order_status', filters.order_status);
-      if (filters.pickup_location_id) params.set('pickup_location_id', filters.pickup_location_id);
+      if (filters.delivery_type?.length)      params.set('delivery_type',      filters.delivery_type.join(','));
+      if (filters.payment_status?.length)     params.set('payment_status',     filters.payment_status.join(','));
+      if (filters.order_status?.length)       params.set('order_status',       filters.order_status.join(','));
+      if (filters.pickup_location_id?.length) params.set('pickup_location_id', filters.pickup_location_id.join(','));
+      if (filters.payment_method?.length)     params.set('payment_method',     filters.payment_method.join(','));
       if (filters.delivery_boy_id) params.set('delivery_boy_id', filters.delivery_boy_id);
-      if (filters.assigned) params.set('assigned', filters.assigned);
-      if (filters.payment_method) params.set('payment_method', filters.payment_method);
-      if (filters.date_from) params.set('date_from', filters.date_from);
-      if (filters.date_to) params.set('date_to', filters.date_to);
-      if (filters.tag_id) params.set('tag_id', filters.tag_id);
+      if (filters.assigned)        params.set('assigned',        filters.assigned);
+      if (filters.date_from)       params.set('date_from',       filters.date_from);
+      if (filters.date_to)         params.set('date_to',         filters.date_to);
+      if (filters.tag_id)          params.set('tag_id',          filters.tag_id);
       const res = await fetch(`${API_BASE}/api/v1/admin/orders?${params}`, { headers });
-      if (res.ok) setAllOrders((await res.json()).filter(o => o.order_status !== 'cancelled'));
+      if (res.ok) setAllOrders(await res.json());
     } catch (_) {}
     finally { setOrdersLoading(false); }
   };
@@ -1081,8 +1223,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     finally { setReportLoading(false); }
   };
 
+  const MULTI_FILTER_KEYS = new Set(['delivery_type', 'payment_status', 'order_status', 'pickup_location_id', 'payment_method']);
+
   const handleOrderFilterChange = (key, value) => {
-    const updated = { ...orderFilters, [key]: value };
+    let updated;
+    if (MULTI_FILTER_KEYS.has(key)) {
+      if (value === '') {
+        updated = { ...orderFilters, [key]: [] };
+      } else {
+        const current = orderFilters[key] || [];
+        updated = {
+          ...orderFilters,
+          [key]: current.includes(value) ? current.filter(v => v !== value) : [...current, value],
+        };
+      }
+    } else {
+      updated = { ...orderFilters, [key]: value };
+    }
     setOrderFilters(updated);
     setOrderSelectedIds([]);
     fetchAllOrders(updated);
@@ -1531,7 +1688,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       <div className="admin-nav">
         <button
           className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reports')}
+          onClick={() => {
+            setActiveTab('reports');
+            fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations();
+            fetchDeliveryBoys(); fetchDeliveryTags(); fetchReportOrders(); fetchShipments();
+          }}
         >
           📈 Reports
         </button>
@@ -1549,13 +1710,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         </button>
         <button
           className={`nav-tab ${activeTab === 'delivery' ? 'active' : ''}`}
-          onClick={() => setActiveTab('delivery')}
+          onClick={() => {
+            setActiveTab('delivery');
+            fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders();
+            fetchNullShipmentCount(); fetchDeliveryTags(); fetchShipments(); fetchReportOrders();
+          }}
         >
           🛵 Delivery
         </button>
         <button
           className={`nav-tab ${activeTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setActiveTab('dashboard')}
+          onClick={() => { setActiveTab('dashboard'); fetchDashboard(); }}
         >
           📊 Dashboard
         </button>
@@ -1717,6 +1882,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               { key: 'products',      label: '🥭 Products' },
               { key: 'promos',        label: '🎟️ Promos' },
               { key: 'site-messages', label: '📢 Site Messages' },
+              { key: 'ads',           label: '🖼️ Ads' },
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -1908,15 +2074,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
               <button
                 className={`manage-sub-tab${deliverySubTab === 'boys' ? ' active' : ''}`}
-                onClick={() => setDeliverySubTab('boys')}
+                onClick={() => { setDeliverySubTab('boys'); fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }}
               >🛵 Delivery Boys</button>
               <button
                 className={`manage-sub-tab${deliverySubTab === 'tags' ? ' active' : ''}`}
-                onClick={() => setDeliverySubTab('tags')}
+                onClick={() => { setDeliverySubTab('tags'); fetchDeliveryTags(); }}
               >🏷️ Tags</button>
               <button
                 className={`manage-sub-tab${deliverySubTab === 'delivery-sheet' ? ' active' : ''}`}
-                onClick={() => setDeliverySubTab('delivery-sheet')}
+                onClick={() => { setDeliverySubTab('delivery-sheet'); fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }}
               >📋 Delivery Sheet</button>
             </div>
 
@@ -2366,11 +2532,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   return String(o.delivery_tag_id) === reportTagFilter;
                 });
 
-              const deliveryOrders = dsFiltered.filter(
-                o => o.order_status !== 'cancelled' &&
-                     o.order_status !== 'pending' &&
-                     (o.delivery_type === 'delivery' ? o.delivery_address : true)
-              );
+              const deliveryOrders = dsFiltered.filter(o => {
+                const addrOk = o.delivery_type === 'delivery' ? o.delivery_address : true;
+                if (dsStatusFilter.size > 0) return dsStatusFilter.has(o.order_status) && addrOk;
+                return o.order_status !== 'cancelled' && o.order_status !== 'pending' && addrOk;
+              });
 
               const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
               const allVariants = [];
@@ -2496,6 +2662,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <option value="untagged">🚫 Untagged</option>
                       {deliveryTags.map(t => <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>)}
                     </select>
+                    {[
+                      { value: 'pending',   label: 'Pending' },
+                      { value: 'confirmed', label: 'Confirmed' },
+                      { value: 'shipped',   label: 'Shipped' },
+                      { value: 'delivered', label: 'Delivered' },
+                      { value: 'cancelled', label: 'Cancelled' },
+                    ].map(({ value, label }) => (
+                      <button
+                        key={value}
+                        className={`report-shipment-btn${dsStatusFilter.has(value) ? ' active' : ''}`}
+                        onClick={() => {
+                          setDsStatusFilter(prev => {
+                            const next = new Set(prev);
+                            next.has(value) ? next.delete(value) : next.add(value);
+                            return next;
+                          });
+                          setDsAddressFilter(null);
+                        }}
+                      >{label}</button>
+                    ))}
                     <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
                     <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => { setSelectedReportShipment('all'); setDsAddressFilter(null); }}>All Shipments</button>
                     {shipmentsWithOrders.map(s => (
@@ -2781,15 +2967,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
               <button
                 className={`manage-sub-tab${reportSubTab === 'all-orders' ? ' active' : ''}`}
-                onClick={() => setReportSubTab('all-orders')}
+                onClick={() => { setReportSubTab('all-orders'); fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations(); }}
               >📋 All Orders</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
-                onClick={() => setReportSubTab('orders-summary')}
+                onClick={() => { setReportSubTab('orders-summary'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
               >Orders Summary</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
-                onClick={() => setReportSubTab('orders-by-type')}
+                onClick={() => { setReportSubTab('orders-by-type'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
               >Orders by Type</button>
             </div>
           </div>
@@ -2960,12 +3146,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   <div className="filter-chips">
                     {options.map(opt => {
                       const count = allOrders.filter(o => String(o[key]) === opt.value).length;
-                      const isActive = orderFilters[key] === opt.value;
+                      const isActive = (orderFilters[key] || []).includes(opt.value);
                       return (
                         <button
                           key={opt.value}
                           className={`filter-chip${isActive ? ' active' : ''}`}
-                          onClick={() => handleOrderFilterChange(key, isActive ? '' : opt.value)}
+                          onClick={() => handleOrderFilterChange(key, opt.value)}
                         >
                           {opt.label}
                           {isActive && <span className="chip-close"> ✕</span>}
@@ -2991,9 +3177,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   className="orders-clear-btn"
                   onClick={() => {
                     const cleared = {
-                      delivery_type: '', payment_status: '', order_status: '',
-                      pickup_location_id: '', delivery_boy_id: '', assigned: '',
-                      payment_method: '', date_from: '', date_to: '', tag_id: '',
+                      delivery_type: [], payment_status: [], order_status: [],
+                      pickup_location_id: [], delivery_boy_id: '', assigned: '',
+                      payment_method: [], date_from: '', date_to: '', tag_id: '',
                     };
                     setOrderFilters(cleared);
                     setActiveFilters({ delivery_type: false, payment_status: false, order_status: false, pickup_location_id: false, payment_method: false });
@@ -3843,6 +4029,172 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             </div>
           </div>
         )}
+
+        {activeTab === 'manage' && manageSubTab === 'ads' && (() => {
+          // Deduplicate: uploaded banners that are already in the static build list
+          const staticSrcs = new Set(ALL_BANNERS.map(b => b.src));
+          const uploadedSlides = uploadedBanners
+            .filter(src => !staticSrcs.has(src))
+            .map(src => ({ src, alt: src.replace(/^\//, '').replace(/\.[^.]+$/, ''), uploaded: true }));
+          const allBannerSlides = [
+            ...ALL_BANNERS.map(b => ({ ...b, uploaded: false })),
+            ...uploadedSlides,
+          ];
+
+          return (
+            <div className="dashboard-section">
+              <h2>🖼️ Ads — Banner Images</h2>
+              <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>
+                Toggle banners on or off. Only <strong>enabled</strong> banners appear in the homepage carousel.
+              </p>
+
+              {/* ── Upload form ── */}
+              <div style={{
+                background: '#f8fafc', border: '1.5px dashed #cbd5e1', borderRadius: 10,
+                padding: '16px 20px', marginBottom: 28, maxWidth: 480,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>📤 Upload New Banner</div>
+                <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+                  Accepts PNG, JPG, WebP, GIF, AVIF · Max 5 MB.<br />
+                  Filename will be prefixed with <code>Banner_</code> if it doesn't already start with "Banner".
+                </p>
+
+                <label style={{
+                  display: 'inline-block', cursor: 'pointer',
+                  background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
+                  padding: '7px 14px', fontSize: 13, fontWeight: 600, color: '#374151',
+                  marginBottom: 12,
+                }}>
+                  Choose Image
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp"
+                    style={{ display: 'none' }}
+                    onChange={handleAdsFileChange}
+                  />
+                </label>
+
+                {adsUploadPreview && (
+                  <div style={{ marginBottom: 12 }}>
+                    <img
+                      src={adsUploadPreview}
+                      alt="preview"
+                      style={{ maxHeight: 100, maxWidth: '100%', borderRadius: 6, border: '1px solid #e5e7eb' }}
+                    />
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+                      {adsUploadFile?.name}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <button
+                    className="submit-button"
+                    style={{ padding: '8px 20px', fontSize: 13 }}
+                    disabled={!adsUploadFile || adsUploading}
+                    onClick={handleUploadBanner}
+                  >
+                    {adsUploading ? 'Uploading…' : 'Upload'}
+                  </button>
+                  {adsUploadFile && (
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 13 }}
+                      onClick={() => { setAdsUploadFile(null); setAdsUploadPreview(null); }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Banner grid ── */}
+              {allBannerSlides.length === 0 ? (
+                <p style={{ color: '#9ca3af' }}>No banner images found. Upload one above.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+                  {allBannerSlides.map(({ src, alt, uploaded }) => {
+                    const filename = src.replace(/^\//, '');
+                    const enabled = bannerStatuses[filename] !== false;
+                    const saving = adsSaving === filename;
+                    const deleting = deletingBanner === filename;
+                    return (
+                      <div
+                        key={filename}
+                        style={{
+                          border: `2px solid ${enabled ? '#16a34a' : '#d1d5db'}`,
+                          borderRadius: 10,
+                          overflow: 'hidden',
+                          width: 220,
+                          background: enabled ? '#f0fdf4' : '#f9fafb',
+                          transition: 'border-color 0.2s, background 0.2s',
+                        }}
+                      >
+                        <div style={{ position: 'relative', height: 120, background: '#e5e7eb' }}>
+                          <img
+                            src={src}
+                            alt={alt}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: enabled ? 1 : 0.4 }}
+                          />
+                          <span style={{
+                            position: 'absolute', top: 6, right: 6,
+                            background: enabled ? '#16a34a' : '#6b7280',
+                            color: '#fff', fontSize: 11, fontWeight: 700,
+                            padding: '2px 8px', borderRadius: 20,
+                          }}>
+                            {enabled ? 'ENABLED' : 'DISABLED'}
+                          </span>
+                          {uploaded && (
+                            <span style={{
+                              position: 'absolute', top: 6, left: 6,
+                              background: '#2563eb', color: '#fff', fontSize: 10, fontWeight: 700,
+                              padding: '2px 7px', borderRadius: 20,
+                            }}>
+                              UPLOADED
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ padding: '10px 12px' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, wordBreak: 'break-all' }}>
+                            {filename}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              disabled={saving}
+                              onClick={() => handleToggleBannerStatus(filename)}
+                              style={{
+                                flex: 1, padding: '6px 0', borderRadius: 6, border: 'none',
+                                cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13,
+                                background: enabled ? '#fee2e2' : '#dcfce7',
+                                color: enabled ? '#b91c1c' : '#15803d',
+                                transition: 'background 0.2s',
+                              }}
+                            >
+                              {saving ? 'Saving…' : enabled ? 'Disable' : 'Enable'}
+                            </button>
+                            {uploaded && (
+                              <button
+                                disabled={deleting}
+                                onClick={() => handleDeleteUploadedBanner(filename)}
+                                style={{
+                                  padding: '6px 10px', borderRadius: 6, border: 'none',
+                                  cursor: deleting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13,
+                                  background: '#fee2e2', color: '#b91c1c',
+                                }}
+                                title="Delete this uploaded banner"
+                              >
+                                {deleting ? '…' : '🗑'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {activeTab === 'manage' && manageSubTab === 'promos' && (
           <div className="dashboard-section">

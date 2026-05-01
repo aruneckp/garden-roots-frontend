@@ -51,12 +51,30 @@ function OriginalHeroBanner({ setPage, pickupLocations, setFocusLocationId }) {
 }
 
 export default function Hero() {
-  const { setPage, setFocusLocationId, pickupLocations } = useApp();
+  const { setPage, setFocusLocationId, pickupLocations, siteConfig } = useApp();
   const [current, setCurrent] = useState(0);
   const [failedSrcs, setFailedSrcs] = useState(new Set());
   const timerRef = useRef(null);
 
-  const activeImages = IMAGE_SLIDES.filter(s => !failedSrcs.has(s.src));
+  const bannerStatuses = (() => {
+    try { return JSON.parse(siteConfig?.banner_statuses || '{}'); } catch (_) { return {}; }
+  })();
+
+  const uploadedSlides = (() => {
+    try {
+      const srcs = JSON.parse(siteConfig?.uploaded_banners || '[]');
+      return srcs
+        .filter(src => !IMAGE_SLIDES.some(s => s.src === src))
+        .map(src => ({ src, alt: src.replace(/^\//, '').replace(/\.[^.]+$/, '') }));
+    } catch (_) { return []; }
+  })();
+
+  const allSlides = [...IMAGE_SLIDES, ...uploadedSlides];
+
+  const activeImages = allSlides.filter(s => {
+    const filename = s.src.replace(/^\//, '');
+    return !failedSrcs.has(s.src) && bannerStatuses[filename] !== false;
+  });
   const total = 1 + activeImages.length; // slide 0 = original banner, 1+ = images
 
   const startTimer = (count) => {

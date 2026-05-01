@@ -120,10 +120,13 @@ export function AppProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Re-fetch prices when tab becomes visible again after inactivity
+  // Re-fetch prices and banner statuses when tab becomes visible again after inactivity
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') loadProducts(false);
+      if (document.visibilityState === 'visible') {
+        loadProducts(false);
+        loadConfig();
+      }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
@@ -247,18 +250,26 @@ export function AppProvider({ children }) {
     prevAdminView.current = adminView;
   }, [adminView]);
 
+  const loadConfig = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/config`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) setSiteConfig(json.data);
+      }
+    } catch (_) {}
+  };
+
   useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/v1/config`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data) setSiteConfig(json.data);
-        }
-      } catch (_) {}
-    };
     loadConfig();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-fetch latest banner statuses from DB on every Home page navigation
+  useEffect(() => {
+    if (page === 'home') loadConfig();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
 
   useEffect(() => {
     setLoadingPickupLocations(true);
