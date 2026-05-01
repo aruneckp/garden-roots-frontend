@@ -593,6 +593,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
   const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
   const [dsShowPhone, setDsShowPhone] = useState(true);
+  const [dsShowTag, setDsShowTag] = useState(true);
+  const [dsSelectedItems, setDsSelectedItems] = useState(null); // null = all selected
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
   const [allOrdersSort, setAllOrdersSort] = useState({ col: null, dir: 'asc' });
@@ -2548,6 +2550,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 });
               });
               allVariants.sort();
+              const visibleVariants = dsSelectedItems === null ? allVariants : allVariants.filter(v => dsSelectedItems.has(v));
 
               const extractPostal = addr => { const m = addr && addr.match(/\b(\d{5,6})\s*$/); return m ? m[1] : ''; };
 
@@ -2689,15 +2692,57 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => { setSelectedReportShipment(s.id); setDsAddressFilter(null); }}>{s.shipment_ref}</button>
                     ))}
                     <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#374151', cursor: 'pointer', userSelect: 'none' }}>
-                      <input
-                        type="checkbox"
-                        checked={dsShowPhone}
-                        onChange={e => setDsShowPhone(e.target.checked)}
-                      />
-                      Show Phone
-                    </label>
                   </div>
+
+                  {/* Column + Items selector */}
+                  {!dsAddressFilter && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Columns:</span>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={dsShowTag} onChange={e => setDsShowTag(e.target.checked)} />
+                          Tag
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={dsShowPhone} onChange={e => setDsShowPhone(e.target.checked)} />
+                          Mobile No.
+                        </label>
+                      </div>
+                      {allVariants.length > 0 && (
+                        <>
+                          <div style={{ width: 1, background: '#e5e7eb', alignSelf: 'stretch', minHeight: 20 }} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Items:</span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                              <input
+                                type="checkbox"
+                                checked={dsSelectedItems === null}
+                                onChange={e => setDsSelectedItems(e.target.checked ? null : new Set())}
+                              />
+                              All
+                            </label>
+                            {allVariants.map(v => (
+                              <label key={v} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={dsSelectedItems === null || dsSelectedItems.has(v)}
+                                  onChange={e => {
+                                    setDsSelectedItems(prev => {
+                                      const current = prev === null ? new Set(allVariants) : new Set(prev);
+                                      if (e.target.checked) current.add(v); else current.delete(v);
+                                      if (current.size === allVariants.length) return null;
+                                      return current;
+                                    });
+                                  }}
+                                />
+                                {v}
+                              </label>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* ── Address drill-down ── */}
                   {dsAddressFilter && (() => {
@@ -2818,7 +2863,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                         )}
                                       />
                                     </td>
-                                    <td style={{ fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap' }}>{o.order_ref}</td>
+                                    <td onClick={() => setEditingOrder(o)} title="View order details" style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                      <strong className="order-ref-link" style={{ color: '#16a34a', textDecoration: 'underline dotted' }}>{o.order_ref}</strong>
+                                    </td>
                                     <td style={{ fontSize: 12 }}>{o.customer_name}</td>
                                     <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
                                     <td style={{ fontSize: 12 }}>
@@ -2879,9 +2926,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       )}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
-                          const hdrs = ['Tag', 'Address / Collection Point', 'Postal', 'Type', 'Customer', ...(dsShowPhone ? ['Phone'] : []), ...allVariants, 'Total'];
-                          const rows = deliveryRows.map(r => [r.tagName || '', r.addr, r.postal || '', r.type, r.name, ...(dsShowPhone ? [r.phone] : []), ...allVariants.map(v => r[v] || 0), r.total]);
-                          rows.push(['', 'TOTAL', '', '', '', ...(dsShowPhone ? [''] : []), ...allVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
+                          const hdrs = [...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', 'Type', 'Customer', ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total'];
+                          const rows = deliveryRows.map(r => [...(dsShowTag ? [r.tagName || ''] : []), r.addr, r.postal || '', r.type, r.name, ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)]);
+                          rows.push([...(dsShowTag ? [''] : []), 'TOTAL', '', '', '', ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
                           downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
@@ -2900,13 +2947,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                   title="Select all"
                                 />
                               </th>
-                              <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />
+                              {dsShowTag && <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />}
                               <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
                               <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
                               <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
                               <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
-                              {dsShowPhone && <SortTh label="Phone" colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />}
-                              {allVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
+                              {dsShowPhone && <SortTh label="Mobile No." colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />}
+                              {visibleVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
                               <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
                             </tr>
                           </thead>
@@ -2932,11 +2979,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     }}
                                   />
                                 </td>
-                                <td style={{ whiteSpace: 'nowrap' }}>
-                                  {r.tagName
-                                    ? <span className="delivery-tag-badge" style={{ background: tagPaletteColor(r.tagId) + '22', color: tagPaletteColor(r.tagId), border: `1px solid ${tagPaletteColor(r.tagId)}55` }}>🏷️ {r.tagName}</span>
-                                    : <span style={{ color: '#d1d5db' }}>—</span>}
-                                </td>
+                                {dsShowTag && (
+                                  <td style={{ whiteSpace: 'nowrap' }}>
+                                    {r.tagName
+                                      ? <span className="delivery-tag-badge" style={{ background: tagPaletteColor(r.tagId) + '22', color: tagPaletteColor(r.tagId), border: `1px solid ${tagPaletteColor(r.tagId)}55` }}>🏷️ {r.tagName}</span>
+                                      : <span style={{ color: '#d1d5db' }}>—</span>}
+                                  </td>
+                                )}
                                 <td className="report-loc-name" style={{ fontSize: 12, cursor: 'pointer', color: '#2563eb', textDecoration: 'underline dotted' }} onClick={() => setDsAddressFilter(r.addr)} title="View all orders for this address">{r.addr}</td>
                                 <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.postal || '—'}</td>
                                 <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
@@ -2944,20 +2993,20 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 </td>
                                 <td style={{ fontSize: 12 }}>{r.name}</td>
                                 {dsShowPhone && <td style={{ fontSize: 12 }}>{r.phone}</td>}
-                                {allVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
-                                <td className="report-row-total">{r.total}</td>
+                                {visibleVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
+                                <td className="report-row-total">{visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)}</td>
                               </tr>
                               );
                             })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
-                              <td colSpan={dsShowPhone ? 7 : 6}><strong>Total</strong></td>
-                              {allVariants.map(v => {
+                              <td colSpan={5 + (dsShowTag ? 1 : 0) + (dsShowPhone ? 1 : 0)}><strong>Total</strong></td>
+                              {visibleVariants.map(v => {
                                 const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
                               })}
-                              <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + allVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
+                              <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
                             </tr>
                           </tfoot>
                         </table>
