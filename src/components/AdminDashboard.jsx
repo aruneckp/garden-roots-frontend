@@ -527,7 +527,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [backfillResult, setBackfillResult] = useState(null);
 
   // Delivery sub-tab
-  const [deliverySubTab, setDeliverySubTab] = useState('boys');
+  const [deliverySubTab, setDeliverySubTab] = useState('delivery-sheet');
 
   // Delivery tags state
   const [deliveryTags, setDeliveryTags] = useState([]);
@@ -576,7 +576,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportOrders, setReportOrders] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
-  const [reportTagFilter, setReportTagFilter] = useState('');
+  const [reportTagFilter, setReportTagFilter] = useState(new Set());
   const [reportSubTab, setReportSubTab] = useState('all-orders');
   const [addressFilter, setAddressFilter] = useState('');
   const [orderColVisibility, setOrderColVisibility] = useState({ tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false });
@@ -1715,6 +1715,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           className={`nav-tab ${activeTab === 'delivery' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('delivery');
+            setDeliverySubTab('delivery-sheet');
             fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders();
             fetchNullShipmentCount(); fetchDeliveryTags(); fetchShipments(); fetchReportOrders();
           }}
@@ -2530,9 +2531,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               const dsFiltered = reportOrders
                 .filter(o => selectedReportShipment === 'all' || o.shipment_id === selectedReportShipment)
                 .filter(o => {
-                  if (!reportTagFilter) return true;
-                  if (reportTagFilter === 'untagged') return !o.delivery_tag_id;
-                  return String(o.delivery_tag_id) === reportTagFilter;
+                  if (reportTagFilter.size === 0) return true;
+                  if (reportTagFilter.has('untagged') && !o.delivery_tag_id) return true;
+                  return reportTagFilter.has(String(o.delivery_tag_id));
                 });
 
               const deliveryOrders = dsFiltered.filter(o => {
@@ -2651,7 +2652,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   const row = addressMap[addr];
                   const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
                   return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
-                }),
+                }).filter(r => r.total > 0),
                 deliverySort.col, deliverySort.dir
               );
 
@@ -2659,39 +2660,60 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
               return (
                 <div className="dashboard-section">
-                  {/* Shipment + tag filter bar */}
-                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                    <select value={reportTagFilter} onChange={e => { setReportTagFilter(e.target.value); setDsAddressFilter(null); }} className="orders-filter-select" style={{ fontSize: 12 }}>
-                      <option value="">All Tags</option>
-                      <option value="untagged">🚫 Untagged</option>
-                      {deliveryTags.map(t => <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>)}
-                    </select>
-                    {[
-                      { value: 'pending',   label: 'Pending' },
-                      { value: 'confirmed', label: 'Confirmed' },
-                      { value: 'shipped',   label: 'Shipped' },
-                      { value: 'delivered', label: 'Delivered' },
-                      { value: 'cancelled', label: 'Cancelled' },
-                    ].map(({ value, label }) => (
+                  {/* Filter rows */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                    {/* Row 1: Tag filter */}
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Tags:</span>
                       <button
-                        key={value}
-                        className={`report-shipment-btn${dsStatusFilter.has(value) ? ' active' : ''}`}
-                        onClick={() => {
-                          setDsStatusFilter(prev => {
-                            const next = new Set(prev);
-                            next.has(value) ? next.delete(value) : next.add(value);
-                            return next;
-                          });
-                          setDsAddressFilter(null);
-                        }}
-                      >{label}</button>
-                    ))}
-                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
-                    <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => { setSelectedReportShipment('all'); setDsAddressFilter(null); }}>All Shipments</button>
-                    {shipmentsWithOrders.map(s => (
-                      <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => { setSelectedReportShipment(s.id); setDsAddressFilter(null); }}>{s.shipment_ref}</button>
-                    ))}
-                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
+                        className={`report-shipment-btn${reportTagFilter.size === 0 ? ' active' : ''}`}
+                        onClick={() => { setReportTagFilter(new Set()); setDsAddressFilter(null); }}
+                      >All</button>
+                      <button
+                        className={`report-shipment-btn${reportTagFilter.has('untagged') ? ' active' : ''}`}
+                        onClick={() => { setReportTagFilter(prev => { const n = new Set(prev); n.has('untagged') ? n.delete('untagged') : n.add('untagged'); return n; }); setDsAddressFilter(null); }}
+                      >🚫 Untagged</button>
+                      {deliveryTags.filter(t => t.is_active).map((t, i) => {
+                        const color = TAG_PALETTE[i % TAG_PALETTE.length];
+                        const isActive = reportTagFilter.has(String(t.id));
+                        return (
+                          <button
+                            key={t.id}
+                            className={`report-shipment-btn${isActive ? ' active' : ''}`}
+                            style={isActive ? { background: color + '22', color, border: `1px solid ${color}55` } : {}}
+                            onClick={() => { setReportTagFilter(prev => { const n = new Set(prev); n.has(String(t.id)) ? n.delete(String(t.id)) : n.add(String(t.id)); return n; }); setDsAddressFilter(null); }}
+                          >🏷️ {t.name}</button>
+                        );
+                      })}
+                    </div>
+                    {/* Row 2: Status filter */}
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Status:</span>
+                      {[
+                        { value: 'pending',   label: 'Pending' },
+                        { value: 'confirmed', label: 'Confirmed' },
+                        { value: 'shipped',   label: 'Shipped' },
+                        { value: 'delivered', label: 'Delivered' },
+                        { value: 'cancelled', label: 'Cancelled' },
+                      ].map(({ value, label }) => (
+                        <button
+                          key={value}
+                          className={`report-shipment-btn${dsStatusFilter.has(value) ? ' active' : ''}`}
+                          onClick={() => {
+                            setDsStatusFilter(prev => { const n = new Set(prev); n.has(value) ? n.delete(value) : n.add(value); return n; });
+                            setDsAddressFilter(null);
+                          }}
+                        >{label}</button>
+                      ))}
+                    </div>
+                    {/* Row 3: Shipment filter */}
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Shipment:</span>
+                      <button className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`} onClick={() => { setSelectedReportShipment('all'); setDsAddressFilter(null); }}>All</button>
+                      {shipmentsWithOrders.map(s => (
+                        <button key={s.id} className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`} onClick={() => { setSelectedReportShipment(s.id); setDsAddressFilter(null); }}>{s.shipment_ref}</button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Column + Items selector */}
@@ -4268,9 +4290,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           const filteredByShipment = reportOrders
             .filter(o => selectedReportShipment === 'all' || o.shipment_id === selectedReportShipment)
             .filter(o => {
-              if (!reportTagFilter) return true;
-              if (reportTagFilter === 'untagged') return !o.delivery_tag_id;
-              return String(o.delivery_tag_id) === reportTagFilter;
+              if (reportTagFilter.size === 0) return true;
+              if (reportTagFilter.has('untagged') && !o.delivery_tag_id) return true;
+              return reportTagFilter.has(String(o.delivery_tag_id));
             });
 
           const validOrders = filteredByShipment.filter(o => o.order_status !== 'cancelled' && o.order_status !== 'pending');
@@ -4306,35 +4328,44 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     <span className="report-total-note">(excludes Cancelled &amp; Pending orders)</span>
                   </div>
 
-                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                    <select
-                      value={reportTagFilter}
-                      onChange={e => setReportTagFilter(e.target.value)}
-                      className="orders-filter-select"
-                      style={{ fontSize: 12 }}
-                    >
-                      <option value="">All Tags</option>
-                      <option value="untagged">🚫 Untagged</option>
-                      {deliveryTags.map(t => (
-                        <option key={t.id} value={String(t.id)}>🏷️ {t.name}</option>
-                      ))}
-                    </select>
-                    <div style={{ width: 1, height: 20, background: '#e5e7eb', margin: '0 4px' }} />
-                    <button
-                      className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`}
-                      onClick={() => setSelectedReportShipment('all')}
-                    >
-                      All Shipments
-                    </button>
-                    {shipmentsWithOrders.map(s => (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Tags:</span>
                       <button
-                        key={s.id}
-                        className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`}
-                        onClick={() => setSelectedReportShipment(s.id)}
-                      >
-                        {s.shipment_ref}
-                      </button>
-                    ))}
+                        className={`report-shipment-btn${reportTagFilter.size === 0 ? ' active' : ''}`}
+                        onClick={() => setReportTagFilter(new Set())}
+                      >All</button>
+                      <button
+                        className={`report-shipment-btn${reportTagFilter.has('untagged') ? ' active' : ''}`}
+                        onClick={() => setReportTagFilter(prev => { const n = new Set(prev); n.has('untagged') ? n.delete('untagged') : n.add('untagged'); return n; })}
+                      >🚫 Untagged</button>
+                      {deliveryTags.filter(t => t.is_active).map((t, i) => {
+                        const color = TAG_PALETTE[i % TAG_PALETTE.length];
+                        const isActive = reportTagFilter.has(String(t.id));
+                        return (
+                          <button
+                            key={t.id}
+                            className={`report-shipment-btn${isActive ? ' active' : ''}`}
+                            style={isActive ? { background: color + '22', color, border: `1px solid ${color}55` } : {}}
+                            onClick={() => setReportTagFilter(prev => { const n = new Set(prev); n.has(String(t.id)) ? n.delete(String(t.id)) : n.add(String(t.id)); return n; })}
+                          >🏷️ {t.name}</button>
+                        );
+                      })}
+                    </div>
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Shipment:</span>
+                      <button
+                        className={`report-shipment-btn${selectedReportShipment === 'all' ? ' active' : ''}`}
+                        onClick={() => setSelectedReportShipment('all')}
+                      >All</button>
+                      {shipmentsWithOrders.map(s => (
+                        <button
+                          key={s.id}
+                          className={`report-shipment-btn${selectedReportShipment === s.id ? ' active' : ''}`}
+                          onClick={() => setSelectedReportShipment(s.id)}
+                        >{s.shipment_ref}</button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* ── Orders Summary tab ── */}
