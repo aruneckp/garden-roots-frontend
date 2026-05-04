@@ -28,10 +28,16 @@ export default function Navbar() {
     return () => clearInterval(timer);
   }, [bannerMessages.length]);
 
-  const navLinks = ['Home', 'Varieties', 'About Us', 'Contact Us'];
+  const navLinks = [
+    { label: 'Home',                    page: 'home' },
+    { label: 'Varieties',               page: 'varieties' },
+    { label: 'Self-collection Points',  page: 'pickup-locations' },
+    { label: 'About Us',                page: 'about-us' },
+    { label: 'Contact Us',              page: 'contact-us' },
+  ];
 
-  const navigate = (link) => {
-    setPage(link.toLowerCase().replace(/ /g, '-'));
+  const navigate = (page) => {
+    setPage(page);
     setMobileOpen(false);
   };
 
@@ -89,9 +95,9 @@ export default function Navbar() {
           {/* Desktop nav links */}
           <ul className="nav-links">
             {navLinks.map(l => (
-              <li key={l}>
-                <a href="#" onClick={e => { e.preventDefault(); navigate(l); }}>
-                  {l}
+              <li key={l.page}>
+                <a href="#" onClick={e => { e.preventDefault(); navigate(l.page); }}>
+                  {l.label}
                 </a>
               </li>
             ))}
@@ -167,9 +173,9 @@ export default function Navbar() {
           <div className="mobile-nav">
             <ul>
               {navLinks.map(l => (
-                <li key={l}>
-                  <a href="#" onClick={e => { e.preventDefault(); navigate(l); }}>
-                    {l}
+                <li key={l.page}>
+                  <a href="#" onClick={e => { e.preventDefault(); navigate(l.page); }}>
+                    {l.label}
                   </a>
                 </li>
               ))}

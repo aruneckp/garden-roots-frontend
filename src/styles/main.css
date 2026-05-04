@@ -26,8 +26,8 @@ body {
   background: var(--green);
   color: #fff;
   text-align: center;
-  padding: 4px 8px;
-  font-size: 7px;
+  padding: 7px 12px;
+  font-size: 14px;
   letter-spacing: 0.25px;
   white-space: nowrap;
   overflow: hidden;
@@ -1728,9 +1728,15 @@ body {
   color: var(--dark);
 }
 .booking-date {
-  font-size: 12px;
+  font-size: 14px;
   color: #9CA3AF;
   margin-top: 2px;
+}
+@media (max-width: 768px) {
+  .booking-date { font-size: 13px; }
+}
+@media (max-width: 480px) {
+  .booking-date { font-size: 12px; }
 }
 .booking-status {
   font-size: 12px;
@@ -2041,7 +2047,7 @@ body {
   .toast { right: 12px; left: 12px; bottom: 80px; font-size: 13px; padding: 10px 14px; }
 
   /* Topbar */
-  .topbar { font-size: 6px; padding: 3px 5px; letter-spacing: 0.1px; }
+  .topbar { font-size: 12px; padding: 6px 10px; letter-spacing: 0.1px; }
 
   /* Navigation */
   .nav-inner { padding: 8px 12px; }

@@ -713,17 +713,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     if (reportSubTab === 'orders-summary' || reportSubTab === 'orders-by-type') { fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }
   }, [reportSubTab]);
 
-  // Re-fetch active tab data when the browser tab regains visibility
+  // Re-fetch dashboard data when the browser tab regains visibility
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      if (activeTab === 'delivery') {
-        fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders();
-        fetchNullShipmentCount(); fetchDeliveryTags(); fetchShipments(); fetchReportOrders();
-      } else if (activeTab === 'reports') {
-        fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations();
-        fetchDeliveryBoys(); fetchDeliveryTags(); fetchReportOrders(); fetchShipments();
-      } else if (activeTab === 'dashboard') {
+      if (activeTab === 'dashboard') {
         fetchDashboard();
       }
     };
@@ -891,7 +885,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         headers,
       });
       if (res.ok) {
-        setUploadedBanners(prev => prev.filter(s => s !== `/${filename}`));
+        setUploadedBanners(prev => prev.filter(s => s !== `/banners/${filename}`));
         showToast('success', `${filename} deleted.`);
       } else {
         let errMsg = `Error ${res.status}`;
@@ -4116,7 +4110,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           const staticSrcs = new Set(ALL_BANNERS.map(b => b.src));
           const uploadedSlides = uploadedBanners
             .filter(src => !staticSrcs.has(src))
-            .map(src => ({ src, alt: src.replace(/^\//, '').replace(/\.[^.]+$/, ''), uploaded: true }));
+            .map(src => ({
+              src: `${API_BASE}${src}`,
+              alt: src.split('/').pop().replace(/\.[^.]+$/, ''),
+              uploaded: true,
+            }));
           const allBannerSlides = [
             ...ALL_BANNERS.map(b => ({ ...b, uploaded: false })),
             ...uploadedSlides,
@@ -4194,7 +4192,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20 }}>
                   {allBannerSlides.map(({ src, alt, uploaded }) => {
-                    const filename = src.replace(/^\//, '');
+                    const filename = src.split('/').pop();
                     const enabled = bannerStatuses[filename] !== false;
                     const saving = adsSaving === filename;
                     const deleting = deletingBanner === filename;

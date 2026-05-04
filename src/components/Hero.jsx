@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { API_BASE } from '../services/api';
 import IMAGE_SLIDES from 'virtual:banners';
 
 function OriginalHeroBanner({ setPage, pickupLocations, setFocusLocationId }) {
@@ -65,14 +66,17 @@ export default function Hero() {
       const srcs = JSON.parse(siteConfig?.uploaded_banners || '[]');
       return srcs
         .filter(src => !IMAGE_SLIDES.some(s => s.src === src))
-        .map(src => ({ src, alt: src.replace(/^\//, '').replace(/\.[^.]+$/, '') }));
+        .map(src => ({
+          src: `${API_BASE}${src}`,
+          alt: src.split('/').pop().replace(/\.[^.]+$/, ''),
+        }));
     } catch (_) { return []; }
   })();
 
   const allSlides = [...IMAGE_SLIDES, ...uploadedSlides];
 
   const activeImages = allSlides.filter(s => {
-    const filename = s.src.replace(/^\//, '');
+    const filename = s.src.split('/').pop();
     return !failedSrcs.has(s.src) && bannerStatuses[filename] !== false;
   });
   const total = 1 + activeImages.length; // slide 0 = original banner, 1+ = images
