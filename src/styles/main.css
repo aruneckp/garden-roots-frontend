@@ -222,11 +222,11 @@ body {
   font-size: 14px;
   line-height: 1.7;
   margin-bottom: 29px;
-  max-width: 352px;
+  max-width: 480px;
 }
 .hero-buttons { display: flex; gap: 11px; flex-wrap: wrap; }
 .hero-locations-box {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 22px;
@@ -234,7 +234,8 @@ body {
   border: 1.5px solid var(--mango);
   border-radius: 14px;
   padding: 14px 18px;
-  max-width: 360px;
+  max-width: 520px;
+  width: 100%;
 }
 .hero-locations-heading {
   display: flex;

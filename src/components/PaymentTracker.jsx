@@ -15,7 +15,7 @@ const STATUS_COLORS = {
   unknown:   '#a78bfa',
 };
 
-export default function PaymentTracker() {
+export default function PaymentTracker({ onOrderClick }) {
   const [shipments, setShipments] = useState([]);
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [paymentSummary, setPaymentSummary] = useState(null);
@@ -112,6 +112,15 @@ export default function PaymentTracker() {
     }
   };
 
+  const handlePieClick = (data) => {
+    if (!data || !data.status) return;
+    if (data.status === 'pending') {
+      setActiveTab('pending');
+    } else {
+      setActiveTab('by-shipment');
+    }
+  };
+
   const handleShipmentClick = (shipment) => {
     setSelectedShipment(shipment);
     fetchPaymentSummary(shipment.id);
@@ -192,6 +201,9 @@ export default function PaymentTracker() {
             {/* Payment Status Pie Chart */}
             <div className="dash-chart-card" style={{ flex: '1 1 300px' }}>
               <h3 className="dash-chart-title">Payment Status</h3>
+              <p style={{ fontSize: 11, color: '#888', margin: '-4px 0 8px', textAlign: 'center' }}>
+                Click a slice to view payments
+              </p>
               {dashboardData.payment_status.length === 0 ? (
                 <p className="no-data">No order data.</p>
               ) : (
@@ -206,6 +218,8 @@ export default function PaymentTracker() {
                       paddingAngle={3}
                       label={({ name, value }) => `${name}: ${value}`}
                       labelLine={false}
+                      onClick={handlePieClick}
+                      cursor="pointer"
                     >
                       {dashboardData.payment_status.map((entry, i) => (
                         <Cell
@@ -272,13 +286,26 @@ export default function PaymentTracker() {
           ) : (
             <div className="payment-details-list">
               {pendingPayments.details.map((payment) => (
-                <div key={payment.payment_id} className="payment-item">
+                <div key={payment.order_id} className="payment-item">
                   <div className="payment-info">
-                    <strong>{payment.shipment_ref}</strong>
-                    <span className="payment-badge pending">Pending</span>
+                    {onOrderClick ? (
+                      <button
+                        className="order-ref-link"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted', fontWeight: 700, fontSize: 'inherit' }}
+                        onClick={() => onOrderClick(payment.order_id)}
+                      >
+                        {payment.order_ref}
+                      </button>
+                    ) : (
+                      <strong>{payment.order_ref}</strong>
+                    )}
+                    <span className="payment-badge pending">To Be Received</span>
                   </div>
-                  <p><strong>📦 Box:</strong> {payment.box_number}</p>
+                  <p><strong>👤 Customer:</strong> {payment.customer_name}{payment.customer_phone ? ` · ${payment.customer_phone}` : ''}</p>
                   <p><strong>💵 Amount:</strong> ₹{payment.amount.toFixed(2)}</p>
+                  {payment.payment_received_by && (
+                    <p><strong>🧑‍💼 Assigned to:</strong> {payment.payment_received_by}</p>
+                  )}
                   <p><strong>📅 Date:</strong> {new Date(payment.created_at).toLocaleDateString()}</p>
                 </div>
               ))}

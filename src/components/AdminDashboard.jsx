@@ -579,7 +579,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportTagFilter, setReportTagFilter] = useState(new Set());
   const [reportSubTab, setReportSubTab] = useState('all-orders');
   const [addressFilter, setAddressFilter] = useState('');
-  const [orderColVisibility, setOrderColVisibility] = useState({ tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false });
+  const [orderColVisibility, setOrderColVisibility] = useState({ phone: false, method: false, tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false, items: false });
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
   const [dsSelectedAddrs, setDsSelectedAddrs] = useState(new Set());
@@ -878,6 +878,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   };
 
   const handleDeleteUploadedBanner = async (filename) => {
+    if (!window.confirm(`Delete "${filename}"? This cannot be undone.`)) return;
     setDeletingBanner(filename);
     try {
       const res = await fetch(`${API_BASE}/api/v1/admin/banners/${encodeURIComponent(filename)}`, {
@@ -1575,6 +1576,22 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
   const filterGroups = [
     {
+      key: 'order_status',
+      label: 'Order Status',
+      options: [
+        { value: 'pending',   label: 'Pending' },
+        { value: 'confirmed', label: 'Confirmed' },
+        { value: 'shipped',   label: 'Shipped' },
+        { value: 'delivered', label: 'Delivered' },
+        { value: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+    {
+      key: 'pickup_location_id',
+      label: 'Locations',
+      options: adminPickupLocations.map(loc => ({ value: String(loc.id), label: loc.name })),
+    },
+    {
       key: 'delivery_type',
       label: 'Delivery Mode',
       options: [
@@ -1590,22 +1607,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         { value: 'succeeded', label: 'Succeeded' },
         { value: 'failed',    label: 'Failed' },
       ],
-    },
-    {
-      key: 'order_status',
-      label: 'Order Status',
-      options: [
-        { value: 'pending',   label: 'Pending' },
-        { value: 'confirmed', label: 'Confirmed' },
-        { value: 'shipped',   label: 'Shipped' },
-        { value: 'delivered', label: 'Delivered' },
-        { value: 'cancelled', label: 'Cancelled' },
-      ],
-    },
-    {
-      key: 'pickup_location_id',
-      label: 'Locations',
-      options: adminPickupLocations.map(loc => ({ value: String(loc.id), label: loc.name })),
     },
     {
       key: 'payment_method',
@@ -2061,7 +2062,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
         {activeTab === 'payments' && !loading && (
           <div className="payments-section">
-            <PaymentTracker />
+            <PaymentTracker onOrderClick={async (orderId) => {
+              try {
+                const res = await fetch(`${API_BASE}/api/v1/admin/orders/${orderId}`, { headers });
+                if (res.ok) setEditingOrder(await res.json());
+              } catch (_) {}
+            }} />
           </div>
         )}
 
@@ -3042,8 +3048,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
               <button
                 className={`manage-sub-tab${reportSubTab === 'all-orders' ? ' active' : ''}`}
-                onClick={() => { setReportSubTab('all-orders'); fetchAllOrders(); fetchAbandonedOrders(); fetchAdminPickupLocations(); }}
+                onClick={() => { setReportSubTab('all-orders'); fetchAllOrders(); fetchAdminPickupLocations(); }}
               >📋 All Orders</button>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'abandoned-orders' ? ' active' : ''}`}
+                onClick={() => { setReportSubTab('abandoned-orders'); fetchAbandonedOrders(); }}
+                style={abandonedOrders.length > 0 ? { borderColor: '#F59E0B', color: '#92400E' } : {}}
+              >⚠️ Abandoned Orders{abandonedOrders.length > 0 ? ` (${abandonedOrders.length})` : ''}</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
                 onClick={() => { setReportSubTab('orders-summary'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
@@ -3078,109 +3089,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               );
             })()}
 
-            {/* Sub-tab toggle: All Orders / Abandoned Checkouts */}
-            <div style={{ display: 'flex', gap: 8, margin: '12px 0' }}>
-              <button
-                className={`checkout-type-btn${ordersSubTab === 'all' ? ' active' : ''}`}
-                onClick={() => setOrdersSubTab('all')}
-              >
-                📋 All Orders
-              </button>
-              <button
-                className={`checkout-type-btn${ordersSubTab === 'abandoned' ? ' active' : ''}`}
-                onClick={() => { setOrdersSubTab('abandoned'); fetchAbandonedOrders(); }}
-                style={abandonedOrders.length > 0 ? { borderColor: '#F59E0B', color: '#92400E' } : {}}
-              >
-                ⚠️ Abandoned Checkouts {abandonedOrders.length > 0 && `(${abandonedOrders.length})`}
-              </button>
-            </div>
-
-            {/* ── Abandoned Checkouts panel ── */}
-            {ordersSubTab === 'abandoned' && (
-              <div>
-                <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '14px 18px', marginBottom: 16, fontSize: 14, color: '#78350F' }}>
-                  <strong>These customers filled their cart and started checkout but never completed payment.</strong>
-                  <br />They were redirected to HitPay but didn't finish. Reach out to recover the sale.
-                </div>
-                {abandonedLoading ? (
-                  <MangoLoader text="Loading abandoned checkouts…" />
-                ) : abandonedOrders.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
-                    <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
-                    <div style={{ fontWeight: 600 }}>No abandoned checkouts</div>
-                    <div style={{ fontSize: 13, marginTop: 4 }}>All recent payment attempts have been completed.</div>
-                  </div>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table className="shipment-table orders-table">
-                      <thead>
-                        <tr>
-                          <th>Order Ref</th>
-                          <th>Customer</th>
-                          <th>Email</th>
-                          <th>Phone</th>
-                          <th>Mode</th>
-                          <th>Items</th>
-                          <th>Total</th>
-                          <th>Abandoned At</th>
-                          <th>Follow Up</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {abandonedOrders.map(o => {
-                          const phone = (o.customer_phone || '').replace(/\D/g, '');
-                          const itemSummary = o.items.map(i => `${i.variant} ×${i.qty}`).join(', ');
-                          const waText = encodeURIComponent(
-                            `Hi ${o.customer_name}! 👋 We noticed you started an order (${o.order_ref}) for $${o.total_price} SGD on Garden Roots but didn't complete the payment. Would you like help completing your order? 🥭`
-                          );
-                          const minutesAgo = o.created_at
-                            ? Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000)
-                            : null;
-                          return (
-                            <tr key={o.id} style={{ background: '#FFFBEB' }}>
-                              <td><strong style={{ color: '#d97706' }}>{o.order_ref}</strong></td>
-                              <td>{o.customer_name}</td>
-                              <td style={{ fontSize: 12 }}>{o.customer_email || '—'}</td>
-                              <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
-                              <td>
-                                <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
-                                  {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
-                                </span>
-                              </td>
-                              <td style={{ fontSize: 12, maxWidth: 200, whiteSpace: 'normal', lineHeight: 1.5 }}>{itemSummary}</td>
-                              <td><strong>${o.total_price} SGD</strong></td>
-                              <td style={{ fontSize: 12, color: '#9ca3af' }}>
-                                {minutesAgo !== null
-                                  ? minutesAgo < 60
-                                    ? `${minutesAgo}m ago`
-                                    : minutesAgo < 1440
-                                      ? `${Math.round(minutesAgo / 60)}h ago`
-                                      : `${Math.round(minutesAgo / 1440)}d ago`
-                                  : '—'}
-                              </td>
-                              <td>
-                                {phone ? (
-                                  <a
-                                    href={`https://wa.me/${phone}?text=${waText}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#25D366', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
-                                  >
-                                    💬 WhatsApp
-                                  </a>
-                                ) : '—'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {ordersSubTab === 'all' && (<>
+            <>
 
             {/* ── Address filter banner ── */}
             {addressFilter && (
@@ -3198,7 +3107,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <div className="orders-filter-panel">
               {/* Row 1: horizontal toggle buttons */}
               <div className="filter-checkbox-row">
-                <span className="filter-type-label">Filter Type:</span>
+                <span className="filter-type-label"><strong>Filter Type:</strong></span>
                 {filterGroups.map(({ key, label }) => (
                   <button
                     key={key}
@@ -3324,28 +3233,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </div>
             )}
 
-            {/* ── Column chooser ── */}
-            <div className="orders-col-chooser">
-              <span className="orders-col-chooser-label">Show columns:</span>
-              {[
-                { key: 'tag',        label: 'Tag' },
-                { key: 'assignedTo', label: 'Assigned To' },
-                { key: 'delCode',    label: 'Del. Code' },
-                { key: 'shipment',   label: 'Shipment' },
-                { key: 'itemNames',  label: 'Item Names' },
-              ].map(({ key, label }) => (
-                <label key={key} className="orders-col-toggle">
-                  <input
-                    type="checkbox"
-                    checked={orderColVisibility[key]}
-                    onChange={() => setOrderColVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
-                  />
-                  {label}
-                </label>
-              ))}
+            {/* ── Download CSV ── */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
               <button
                 className="report-download-btn"
-                style={{ marginLeft: 'auto' }}
                 disabled={allOrders.length === 0}
                 onClick={() => {
                   const filtered = addressFilter
@@ -3358,33 +3249,36 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     : allOrders;
 
                   const headers = [
-                    'Order Ref', 'Customer', 'Phone', 'Mode', 'Location / Address',
-                    'Order Status', 'Payment Status', 'Payment Method',
+                    'Order Ref', 'Customer', 'Mode', 'Location / Address',
+                    'Order Status', 'Payment Status',
+                    ...(orderColVisibility.phone      ? ['Phone']       : []),
+                    ...(orderColVisibility.method     ? ['Payment Method'] : []),
                     ...(orderColVisibility.tag        ? ['Tag']         : []),
                     ...(orderColVisibility.assignedTo ? ['Assigned To'] : []),
                     ...(orderColVisibility.delCode    ? ['Del. Code']   : []),
                     ...(orderColVisibility.shipment   ? ['Shipment']    : []),
                     ...(orderColVisibility.itemNames  ? ['Item Names']  : []),
-                    'Items', 'Promo Code', 'Discount', 'Total', 'Date',
+                    ...(orderColVisibility.items      ? ['Items']       : []),
+                    'Promo Code', 'Discount', 'Total', 'Date',
                   ];
 
                   const rows = filtered.map(o => [
                     o.order_ref,
                     o.customer_name,
-                    o.customer_phone || '',
                     o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup',
                     o.delivery_type === 'pickup'
                       ? (o.pickup_location_name || `Loc #${o.pickup_location_id}`)
                       : (o.delivery_address || ''),
                     o.order_status,
                     o.payment_status,
-                    o.payment_method || '',
+                    ...(orderColVisibility.phone      ? [o.customer_phone || '']     : []),
+                    ...(orderColVisibility.method     ? [o.payment_method || '']     : []),
                     ...(orderColVisibility.tag        ? [o.delivery_tag_name || '']  : []),
                     ...(orderColVisibility.assignedTo ? [o.delivery_boy_name || '']  : []),
                     ...(orderColVisibility.delCode    ? [o.delivery_code || '']      : []),
                     ...(orderColVisibility.shipment   ? [o.shipment_id ? `#${o.shipment_id}` : ''] : []),
                     ...(orderColVisibility.itemNames  ? [(o.items || []).map(it => `${(it.variant || '').split(/[-–]/)[0].trim()} (${it.qty})`).join('; ')] : []),
-                    o.items_count,
+                    ...(orderColVisibility.items      ? [o.items_count]              : []),
                     o.promo_code || '',
                     Number(o.discount_amount || 0) > 0 ? Number(o.discount_amount).toFixed(2) : '',
                     o.total_price,
@@ -3397,6 +3291,30 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               >
                 ⬇ Download CSV
               </button>
+            </div>
+
+            {/* ── Column chooser ── */}
+            <div className="orders-col-chooser">
+              <span className="orders-col-chooser-label">Show columns:</span>
+              {[
+                { key: 'phone',      label: 'Phone' },
+                { key: 'method',     label: 'Method' },
+                { key: 'tag',        label: 'Tag' },
+                { key: 'assignedTo', label: 'Assigned To' },
+                { key: 'delCode',    label: 'Del. Code' },
+                { key: 'shipment',   label: 'Shipment' },
+                { key: 'itemNames',  label: 'Item Names' },
+                { key: 'items',      label: 'Items' },
+              ].map(({ key, label }) => (
+                <label key={key} className="orders-col-toggle">
+                  <input
+                    type="checkbox"
+                    checked={orderColVisibility[key]}
+                    onChange={() => setOrderColVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
+                  />
+                  {label}
+                </label>
+              ))}
             </div>
 
             {/* ── Orders table ── */}
@@ -3436,18 +3354,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       </th>
                       <SortTh label="Order Ref" colKey="order_ref" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Customer" colKey="customer_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
-                      <SortTh label="Phone" colKey="customer_phone" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      {orderColVisibility.phone      && <SortTh label="Phone" colKey="customer_phone" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       <SortTh label="Mode" colKey="delivery_type" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Location / Address" colKey="_location" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Order Status" colKey="order_status" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Payment" colKey="payment_status" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
-                      <SortTh label="Method" colKey="payment_method" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      {orderColVisibility.method     && <SortTh label="Method" colKey="payment_method" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.tag        && <SortTh label="Tag" colKey="delivery_tag_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.assignedTo && <SortTh label="Assigned To" colKey="delivery_boy_name" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.delCode    && <SortTh label="Del. Code" colKey="delivery_code" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.shipment   && <SortTh label="Shipment" colKey="shipment_id" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       {orderColVisibility.itemNames  && <th>Item Names</th>}
-                      <SortTh label="Items" colKey="items_count" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      {orderColVisibility.items      && <SortTh label="Items" colKey="items_count" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       <SortTh label="Total" colKey="total_price" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Date" colKey="_date" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                     </tr>
@@ -3468,7 +3386,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               <strong className="order-ref-link" style={{ cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}>{o.order_ref}</strong>
                             </td>
                             <td>{o.customer_name}</td>
-                            <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
+                            {orderColVisibility.phone && <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>}
                             <td>
                               <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
                                 {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
@@ -3489,14 +3407,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 {o.payment_status}
                               </span>
                             </td>
-                            <td style={{ fontSize: 12 }}>
-                              <div>{o.payment_method || '—'}</div>
-                              {o.payment_method === 'pay_later' && o.booked_by_admin_name && (
-                                <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
-                                  by {o.booked_by_admin_name}
-                                </div>
-                              )}
-                            </td>
+                            {orderColVisibility.method && (
+                              <td style={{ fontSize: 12 }}>
+                                <div>{o.payment_method || '—'}</div>
+                                {o.payment_method === 'pay_later' && o.booked_by_admin_name && (
+                                  <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>
+                                    by {o.booked_by_admin_name}
+                                  </div>
+                                )}
+                              </td>
+                            )}
                             {orderColVisibility.tag && (
                               <td>
                                 {o.delivery_tag_name
@@ -3532,11 +3452,13 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     ))}
                               </td>
                             )}
-                            <td style={{ textAlign: 'center', fontSize: 13 }}>
-                              <button className="items-toggle-btn" onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}>
-                                {o.items_count} item{o.items_count !== 1 ? 's' : ''} {isExpanded ? '▲' : '▼'}
-                              </button>
-                            </td>
+                            {orderColVisibility.items && (
+                              <td style={{ textAlign: 'center', fontSize: 13 }}>
+                                <button className="items-toggle-btn" onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}>
+                                  {o.items_count} item{o.items_count !== 1 ? 's' : ''} {isExpanded ? '▲' : '▼'}
+                                </button>
+                              </td>
+                            )}
                             <td><strong>₹{o.total_price}</strong></td>
                             <td style={{ fontSize: 12 }}>
                               {o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
@@ -3545,7 +3467,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
                           {isExpanded && (
                             <tr className="order-detail-row">
-                              <td colSpan={16}>
+                              <td colSpan={9 + Object.values(orderColVisibility).filter(Boolean).length}>
                                 <div className="order-detail-panel">
                                   <div className="order-detail-grid">
                                     <div className="order-detail-block">
@@ -3650,6 +3572,98 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               );
             })()}
             </>)}
+          </div>
+        )}
+
+        {activeTab === 'reports' && reportSubTab === 'abandoned-orders' && (
+          <div className="orders-section">
+            <div className="orders-heading-row">
+              <h2>⚠️ Abandoned Orders</h2>
+              {abandonedOrders.length > 0 && (
+                <span className="orders-stat-badge" style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D' }}>
+                  {abandonedOrders.length} Abandoned
+                </span>
+              )}
+            </div>
+            <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 10, padding: '14px 18px', marginBottom: 16, fontSize: 14, color: '#78350F' }}>
+              <strong>These customers filled their cart and started checkout but never completed payment.</strong>
+              <br />They were redirected to HitPay but didn't finish. Reach out to recover the sale.
+            </div>
+            {abandonedLoading ? (
+              <MangoLoader text="Loading abandoned checkouts…" />
+            ) : abandonedOrders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0', color: '#6b7280' }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+                <div style={{ fontWeight: 600 }}>No abandoned checkouts</div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>All recent payment attempts have been completed.</div>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="shipment-table orders-table">
+                  <thead>
+                    <tr>
+                      <th>Order Ref</th>
+                      <th>Customer</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Mode</th>
+                      <th>Items</th>
+                      <th>Total</th>
+                      <th>Abandoned At</th>
+                      <th>Follow Up</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {abandonedOrders.map(o => {
+                      const phone = (o.customer_phone || '').replace(/\D/g, '');
+                      const itemSummary = o.items.map(i => `${i.variant} ×${i.qty}`).join(', ');
+                      const waText = encodeURIComponent(
+                        `Hi ${o.customer_name}! 👋 We noticed you started an order (${o.order_ref}) for $${o.total_price} SGD on Garden Roots but didn't complete the payment. Would you like help completing your order? 🥭`
+                      );
+                      const minutesAgo = o.created_at
+                        ? Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000)
+                        : null;
+                      return (
+                        <tr key={o.id} style={{ background: '#FFFBEB' }}>
+                          <td><strong style={{ color: '#d97706' }}>{o.order_ref}</strong></td>
+                          <td>{o.customer_name}</td>
+                          <td style={{ fontSize: 12 }}>{o.customer_email || '—'}</td>
+                          <td style={{ fontSize: 12 }}>{o.customer_phone || '—'}</td>
+                          <td>
+                            <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
+                              {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 12, maxWidth: 200, whiteSpace: 'normal', lineHeight: 1.5 }}>{itemSummary}</td>
+                          <td><strong>${o.total_price} SGD</strong></td>
+                          <td style={{ fontSize: 12, color: '#9ca3af' }}>
+                            {minutesAgo !== null
+                              ? minutesAgo < 60
+                                ? `${minutesAgo}m ago`
+                                : minutesAgo < 1440
+                                  ? `${Math.round(minutesAgo / 60)}h ago`
+                                  : `${Math.round(minutesAgo / 1440)}d ago`
+                              : '—'}
+                          </td>
+                          <td>
+                            {phone ? (
+                              <a
+                                href={`https://wa.me/${phone}?text=${waText}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: '#25D366', color: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, textDecoration: 'none' }}
+                              >
+                                💬 WhatsApp
+                              </a>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -4236,12 +4250,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, wordBreak: 'break-all' }}>
                             {filename}
                           </div>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             <button
                               disabled={saving}
                               onClick={() => handleToggleBannerStatus(filename)}
                               style={{
-                                flex: 1, padding: '6px 0', borderRadius: 6, border: 'none',
+                                padding: '6px 0', borderRadius: 6, border: 'none',
                                 cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13,
                                 background: enabled ? '#fee2e2' : '#dcfce7',
                                 color: enabled ? '#b91c1c' : '#15803d',
@@ -4250,19 +4264,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             >
                               {saving ? 'Saving…' : enabled ? 'Disable' : 'Enable'}
                             </button>
-                            {uploaded && (
+                            {uploaded ? (
                               <button
                                 disabled={deleting}
                                 onClick={() => handleDeleteUploadedBanner(filename)}
                                 style={{
-                                  padding: '6px 10px', borderRadius: 6, border: 'none',
+                                  padding: '6px 0', borderRadius: 6, border: '1.5px solid #fca5a5',
                                   cursor: deleting ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13,
-                                  background: '#fee2e2', color: '#b91c1c',
+                                  background: '#fff', color: '#b91c1c',
+                                  transition: 'background 0.2s',
                                 }}
-                                title="Delete this uploaded banner"
                               >
-                                {deleting ? '…' : '🗑'}
+                                {deleting ? 'Deleting…' : 'Delete'}
                               </button>
+                            ) : (
+                              <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingTop: 2 }}>
+                                Built-in — disable to hide
+                              </div>
                             )}
                           </div>
                         </div>

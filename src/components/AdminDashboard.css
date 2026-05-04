@@ -480,6 +480,32 @@
   box-shadow: 0 2px 6px rgba(45,90,61,0.18);
 }
 
+/* ── All Orders view toggle (All / Abandoned) ── */
+.checkout-type-btn {
+  padding: 7px 16px;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.checkout-type-btn:hover {
+  color: #2d5a3d;
+  border-color: #2d5a3d;
+  background: #f0fdf4;
+}
+.checkout-type-btn.active {
+  color: #fff;
+  background: #2d5a3d;
+  border-color: #2d5a3d;
+  box-shadow: 0 2px 6px rgba(45,90,61,0.18);
+}
+
 .admin-content {
   max-width: 1200px;
   margin: 0 auto;
@@ -1801,6 +1827,7 @@
   color: #2d5a3d;
   cursor: pointer;
   text-decoration: underline dotted;
+  font-size: 10px;
 }
 
 .orders-item-names-cell {
@@ -3015,5 +3042,140 @@
   }
   .oem-pt-footer .oem-save-btn {
     width: 100%;
+  }
+}
+
+/* ── Reports tab: tablet (≤768px) ── */
+@media (max-width: 768px) {
+  /* Sub-tab nav scrolls horizontally so long labels don't wrap to a second line */
+  .manage-sub-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .manage-sub-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .orders-heading-row h2 {
+    font-size: 18px;
+  }
+  .orders-stat-badge {
+    font-size: 12px;
+    padding: 3px 10px;
+  }
+  .checkout-type-btn {
+    font-size: 12px;
+    padding: 6px 13px;
+  }
+
+  /* All Orders table: reduce the default 15px/14px desktop sizing */
+  .shipment-table th,
+  .location-table th,
+  .shipment-table td,
+  .location-table td {
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  /* Orders Summary / By Type table: tighter than desktop */
+  .report-location-table th,
+  .report-location-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  /* Address cell: allow narrower column on tablet */
+  .orders-address-cell {
+    min-width: 130px;
+    max-width: 160px;
+  }
+
+  /* Ensure report table wrappers support touch scroll */
+  .report-table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Reports tab: phone (≤480px) ── */
+@media (max-width: 480px) {
+  .orders-heading-row h2 {
+    font-size: 15px;
+  }
+  .orders-stat-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+  .checkout-type-btn {
+    font-size: 11px;
+    padding: 5px 11px;
+  }
+
+  /* All Orders table: compact on phones */
+  .shipment-table th,
+  .location-table th,
+  .shipment-table td,
+  .location-table td {
+    padding: 7px 8px;
+    font-size: 12px;
+  }
+
+  /* Address cell: allow narrower column on phone */
+  .orders-address-cell {
+    min-width: 100px;
+    max-width: 130px;
+    font-size: 11px;
+  }
+
+  /* Status badges inside table cells */
+  .status-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  /* Banner: stack label, value, and note vertically */
+  .report-total-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+  .report-total-value {
+    font-size: 20px;
+  }
+  .report-total-label {
+    font-size: 13px;
+  }
+  .report-total-note {
+    font-size: 11px;
+  }
+
+  /* Shipment / tag filter chips */
+  .report-shipment-filter-bar {
+    gap: 6px;
+  }
+  .report-shipment-btn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  /* Orders Summary / By Type table cells */
+  .report-location-table th,
+  .report-location-table td {
+    padding: 6px 7px;
+    font-size: 11px;
+  }
+
+  /* Download CSV button */
+  .report-download-btn {
+    font-size: 11px;
+    padding: 5px 11px;
+  }
+
+  /* Column chooser label takes full width so toggles start on next line */
+  .orders-col-chooser-label {
+    width: 100%;
+    margin-bottom: 2px;
   }
 }
