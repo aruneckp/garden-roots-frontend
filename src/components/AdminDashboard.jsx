@@ -3051,11 +3051,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 onClick={() => { setReportSubTab('all-orders'); fetchAllOrders(); fetchAdminPickupLocations(); }}
               >📋 All Orders</button>
               <button
-                className={`manage-sub-tab${reportSubTab === 'abandoned-orders' ? ' active' : ''}`}
-                onClick={() => { setReportSubTab('abandoned-orders'); fetchAbandonedOrders(); }}
-                style={abandonedOrders.length > 0 ? { borderColor: '#F59E0B', color: '#92400E' } : {}}
-              >⚠️ Abandoned Orders{abandonedOrders.length > 0 ? ` (${abandonedOrders.length})` : ''}</button>
-              <button
                 className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
                 onClick={() => { setReportSubTab('orders-summary'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
               >Orders Summary</button>
@@ -3063,6 +3058,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
                 onClick={() => { setReportSubTab('orders-by-type'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
               >Orders by Type</button>
+              <button
+                className={`manage-sub-tab${reportSubTab === 'abandoned-orders' ? ' active' : ''}`}
+                onClick={() => { setReportSubTab('abandoned-orders'); fetchAbandonedOrders(); }}
+                style={abandonedOrders.length > 0 ? { borderColor: '#F59E0B', color: '#92400E' } : {}}
+              >⚠️ Abandoned Orders{abandonedOrders.length > 0 ? ` (${abandonedOrders.length})` : ''}</button>
             </div>
           </div>
         )}
@@ -4509,7 +4509,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                       const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString() : '—';
                                       return (
                                         <tr key={o.id}>
-                                          <td><strong>{o.order_ref}</strong></td>
+                                          <td onClick={() => setEditingOrder(o)} title="Click to edit order">
+                                            <strong className="order-ref-link" style={{ cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}>{o.order_ref}</strong>
+                                          </td>
                                           <td>{o.customer_name}</td>
                                           <td>
                                             <span className={`status-badge status-${o.order_status}`}>
@@ -4701,7 +4703,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                       const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString() : '—';
                                       return (
                                         <tr key={o.id}>
-                                          <td><strong>{o.order_ref}</strong></td>
+                                          <td onClick={() => setEditingOrder(o)} title="Click to edit order">
+                                            <strong className="order-ref-link" style={{ cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted' }}>{o.order_ref}</strong>
+                                          </td>
                                           <td>{o.customer_name}</td>
                                           <td>
                                             <span className={`status-badge status-${o.order_status}`}>

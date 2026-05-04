@@ -24,6 +24,7 @@ export default function PaymentTracker({ onOrderClick }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedOwner, setSelectedOwner] = useState('all');
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentData, setPaymentData] = useState({
     shipment_box_id: '',
@@ -281,34 +282,85 @@ export default function PaymentTracker({ onOrderClick }) {
             </div>
           </div>
 
-          {pendingPayments.pending_records === 0 ? (
+          {/* Owner filter tabs */}
+          {(() => {
+            const namedOwners = Array.from(new Set(
+              pendingPayments.details.map(p => p.payment_received_by).filter(Boolean)
+            ));
+            const unassignedCount = pendingPayments.details.filter(p => !p.payment_received_by).length;
+            const owners = ['all', ...namedOwners, ...(unassignedCount > 0 ? ['__unassigned__'] : [])];
+            if (owners.length <= 1) return null;
+            return (
+              <div className="manage-sub-nav" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                {owners.map(owner => {
+                  const count = owner === 'all'
+                    ? pendingPayments.details.length
+                    : owner === '__unassigned__'
+                    ? unassignedCount
+                    : pendingPayments.details.filter(p => p.payment_received_by === owner).length;
+                  return (
+                    <button
+                      key={owner}
+                      className={`manage-sub-tab${selectedOwner === owner ? ' active' : ''}`}
+                      onClick={() => setSelectedOwner(owner)}
+                    >
+                      {owner === 'all'
+                        ? `👥 All (${count})`
+                        : owner === '__unassigned__'
+                        ? `❓ Unassigned (${count})`
+                        : `🧑‍💼 ${owner} (${count})`}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {pendingPayments.details.length === 0 ? (
             <p className="no-data">✅ No pending payments! All collected.</p>
           ) : (
             <div className="payment-details-list">
-              {pendingPayments.details.map((payment) => (
-                <div key={payment.order_id} className="payment-item">
-                  <div className="payment-info">
-                    {onOrderClick ? (
-                      <button
-                        className="order-ref-link"
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted', fontWeight: 700, fontSize: 'inherit' }}
-                        onClick={() => onOrderClick(payment.order_id)}
-                      >
-                        {payment.order_ref}
-                      </button>
-                    ) : (
-                      <strong>{payment.order_ref}</strong>
+              {pendingPayments.details
+                .filter(p =>
+                  selectedOwner === 'all' ||
+                  (selectedOwner === '__unassigned__' ? !p.payment_received_by : p.payment_received_by === selectedOwner)
+                )
+                .map((payment) => {
+                const isReceived = payment.payment_collection_status === 'received';
+                return (
+                  <div key={payment.order_id} className="payment-item">
+                    <div className="payment-info">
+                      {onOrderClick ? (
+                        <button
+                          className="order-ref-link"
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#16a34a', textDecoration: 'underline dotted', fontWeight: 700, fontSize: 'inherit' }}
+                          onClick={() => onOrderClick(payment.order_id)}
+                        >
+                          {payment.order_ref}
+                        </button>
+                      ) : (
+                        <strong>{payment.order_ref}</strong>
+                      )}
+                      {isReceived
+                        ? <span className="payment-badge" style={{ background: '#d1fae5', color: '#065f46' }}>✅ Received</span>
+                        : <span className="payment-badge pending">⏳ To Be Received</span>
+                      }
+                    </div>
+                    <p><strong>👤 Customer:</strong> {payment.customer_name}{payment.customer_phone ? ` · ${payment.customer_phone}` : ''}</p>
+                    <p><strong>💵 Amount:</strong> ₹{payment.amount.toFixed(2)}</p>
+                    {payment.payment_received_by && (
+                      <p><strong>🧑‍💼 Assigned to:</strong> {payment.payment_received_by}</p>
                     )}
-                    <span className="payment-badge pending">To Be Received</span>
+                    {isReceived && payment.payment_updated_by && (
+                      <p><strong>✅ Received by:</strong> {payment.payment_updated_by}</p>
+                    )}
+                    {!isReceived && payment.payment_updated_by && (
+                      <p><strong>✏️ Last updated by:</strong> {payment.payment_updated_by}</p>
+                    )}
+                    <p><strong>📅 Date:</strong> {new Date(payment.created_at).toLocaleDateString()}</p>
                   </div>
-                  <p><strong>👤 Customer:</strong> {payment.customer_name}{payment.customer_phone ? ` · ${payment.customer_phone}` : ''}</p>
-                  <p><strong>💵 Amount:</strong> ₹{payment.amount.toFixed(2)}</p>
-                  {payment.payment_received_by && (
-                    <p><strong>🧑‍💼 Assigned to:</strong> {payment.payment_received_by}</p>
-                  )}
-                  <p><strong>📅 Date:</strong> {new Date(payment.created_at).toLocaleDateString()}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
