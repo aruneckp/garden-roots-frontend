@@ -574,7 +574,12 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                 <div className="oem-add-products">
                   {activeProducts.map(p => (
                     <div key={p.id} className="oem-add-product-group">
-                      <div className="oem-add-product-name">{p.name}</div>
+                      <div className="oem-add-product-name">
+                        {p.name}
+                        {!p.is_active && (
+                          <span style={{ marginLeft: 6, fontSize: 11, color: '#999', fontWeight: 500, background: '#f0f0f0', borderRadius: 4, padding: '1px 6px' }}>Inactive</span>
+                        )}
+                      </div>
                       <div className="oem-add-variant-row">
                         {(p.variants || []).map(v => {
                           const alreadyIn = items.some(it => it.product_variant_id === v.id);

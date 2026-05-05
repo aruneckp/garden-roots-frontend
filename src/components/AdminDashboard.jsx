@@ -1636,7 +1636,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         <OrderEditModal
           order={editingOrder}
           headers={headers}
-          activeProducts={adminProducts.filter(p => p.is_active)}
+          activeProducts={adminProducts}
           pickupLocations={adminPickupLocations}
           onClose={() => setEditingOrder(null)}
           onSaved={(updated) => {
@@ -3571,7 +3571,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </div>
               );
             })()}
-            </>)}
+            </>
           </div>
         )}
 
