@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, useEffect } from 'react';
 import { varieties as fallbackVarieties } from '../data/varieties'; // used only for local_names lookup
 import { getBotReply } from '../data/botReplies';
 import { productApi, authApi, orderApi, paymentApi, userApi, locationApi, API_BASE } from '../services/api';
+import { onLoading } from '../services/loadingBus';
 
 const AppContext = createContext(null);
 
@@ -85,6 +86,7 @@ export function AppProvider({ children }) {
   const [payState, setPayState] = useState('idle');
   const [orderRef, setOrderRef] = useState(null);
   const [confirmedTotal, setConfirmedTotal] = useState(null);
+  const [confirmedNextDeliveryDate, setConfirmedNextDeliveryDate] = useState(null);
   // Incomplete order banner: set when customer left without paying
   const [incompleteOrderId, setIncompleteOrderId] = useState(null);
 
@@ -173,9 +175,11 @@ export function AppProvider({ children }) {
           const result  = resp?.data ?? resp;
           const ref   = result?.order_ref ?? result?.data?.order_ref ?? null;
           const total = result?.total_price ?? result?.data?.total_price ?? null;
+          const nextDelivery = result?.next_delivery_date ?? result?.data?.next_delivery_date ?? null;
           console.log('[HitPay] confirm success, order_ref=', ref, 'total=', total);
           setOrderRef(ref);
           if (total !== null) setConfirmedTotal(total);
+          setConfirmedNextDeliveryDate(nextDelivery);
           setPayState('success');
           // Read token from localStorage — userToken state may not be restored yet
           refreshMyOrders(localStorage.getItem('user_token'));
@@ -192,6 +196,7 @@ export function AppProvider({ children }) {
         if (order?.payment_status === 'succeeded') {
           setOrderRef(order.order_ref ?? null);
           if (order.total_price != null) setConfirmedTotal(parseFloat(order.total_price));
+          setConfirmedNextDeliveryDate(order.next_delivery_date ?? null);
           setPayState('success');
           refreshMyOrders(localStorage.getItem('user_token'));
           return;
@@ -356,6 +361,14 @@ export function AppProvider({ children }) {
     }, 900 + Math.random() * 400);
   };
 
+  // ── Global API loading indicator ───────────────────────────────────────────
+  const [apiLoadingCount, setApiLoadingCount] = useState(0);
+  useEffect(() => {
+    return onLoading((active) =>
+      setApiLoadingCount((n) => (active ? n + 1 : Math.max(0, n - 1)))
+    );
+  }, []);
+
   return (
     <AppContext.Provider value={{
       // Navigation
@@ -387,6 +400,7 @@ export function AppProvider({ children }) {
       paymentMethod, setPaymentMethod,
       payState, setPayState,
       confirmedTotal,
+      confirmedNextDeliveryDate, setConfirmedNextDeliveryDate,
       orderRef, setOrderRef,
       myOrders, setMyOrders, myOrdersLoading, myOrdersError, refreshMyOrders,
       incompleteOrderId, setIncompleteOrderId,
@@ -399,6 +413,8 @@ export function AppProvider({ children }) {
       siteConfig, setSiteConfig,
       // Pickup locations
       pickupLocations, loadingPickupLocations,
+      // Global API loading
+      apiLoading: apiLoadingCount > 0,
     }}>
       {children}
     </AppContext.Provider>

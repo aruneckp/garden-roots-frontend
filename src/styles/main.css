@@ -1159,6 +1159,32 @@ body {
 .spinner { width:40px; height:40px; border:4px solid var(--mango-light); border-top-color:var(--green); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 13px; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* Global API loading overlay */
+.global-api-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.global-api-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(245,158,11,0.25);
+  border-top-color: var(--mango, #F59E0B);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  box-shadow: 0 4px 20px rgba(245,158,11,0.3);
+  background: rgba(255,255,255,0.85);
+  padding: 10px;
+  box-sizing: border-box;
+}
+@media (max-width: 480px) {
+  .global-api-spinner { width: 40px; height: 40px; }
+}
+
 /* Mango buffering loader */
 .mango-loader { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3rem 1rem; gap:14px; }
 .mango-loader-emoji { font-size:52px; animation:mango-bounce 0.9s ease-in-out infinite; display:block; filter:drop-shadow(0 6px 12px rgba(245,158,11,0.35)); }

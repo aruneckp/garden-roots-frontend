@@ -22,7 +22,7 @@ const CTA_MESSAGES = [
 ];
 
 function StoreContent() {
-  const { page, toast, showAuthModal, user, logoutUser, adminView, adminInitialTab, setChatOpen } = useApp();
+  const { page, toast, showAuthModal, user, logoutUser, adminView, adminInitialTab, setChatOpen, apiLoading } = useApp();
 
   const [msgIndex, setMsgIndex] = useState(0);
   const [msgVisible, setMsgVisible] = useState(true);
@@ -115,6 +115,12 @@ function StoreContent() {
       {page === 'home' && <Chatbot hideFab={true} />}
 
       {showAuthModal && <AuthModal />}
+
+      {apiLoading && (
+        <div className="global-api-loader" aria-label="Loading" role="status">
+          <div className="global-api-spinner" />
+        </div>
+      )}
     </>
   );
 }

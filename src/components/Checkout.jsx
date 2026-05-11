@@ -16,6 +16,7 @@ export default function Checkout() {
     orderRef, setOrderRef, setCart, setToast, setPage,
     incompleteOrderId, setIncompleteOrderId,
     confirmedTotal,
+    confirmedNextDeliveryDate, setConfirmedNextDeliveryDate,
     user, userToken, loginUser, setToast: setAppToast,
     checkoutPickupName, setCheckoutPickupName,
     pickupLocations,
@@ -284,6 +285,7 @@ export default function Checkout() {
     const order = await handleCreateOrder();
     if (!order) { setPayState('idle'); return; }
     setOrderRef(order.order_ref);
+    setConfirmedNextDeliveryDate(order.next_delivery_date ?? null);
     setPayState('success');
   };
 
@@ -328,6 +330,21 @@ export default function Checkout() {
             Save this number to track your order
           </div>
         </div>
+
+        {/* Next delivery date */}
+        {confirmedNextDeliveryDate && (
+          <div style={{ background: '#EFF6FF', border: '2px solid #93C5FD', borderRadius: 12, padding: '16px 24px', marginBottom: 24, display: 'inline-flex', alignItems: 'center', gap: 12, minWidth: 260 }}>
+            <span style={{ fontSize: 22 }}>📅</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                Next Delivery Date
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--dark)' }}>
+                {new Date(confirmedNextDeliveryDate).toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Items ordered */}
         <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 24px', marginBottom: 24, textAlign: 'left' }}>

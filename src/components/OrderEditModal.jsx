@@ -231,8 +231,8 @@ function PaymentTab({ order, headers }) {
             // if the new selection is someone else and status is already "received", reset it
             // Find myself in the loaded list by email, fall back to full_name or username
             const myEntry = adminUsers.find(u => u.is_me);
-            // Reset to "to_be_received" if a different person is selected
-            const isSelf = !selected || (myEntry ? selected === myEntry.name : false);
+            // "Business Account" is open to all — treat it like self for status purposes
+            const isSelf = !selected || selected === 'Business Account' || (myEntry ? selected === myEntry.name : false);
             if (!isSelf && collectionStatus === 'received') {
               setCollectionStatus('to_be_received');
             }
@@ -249,8 +249,8 @@ function PaymentTab({ order, headers }) {
       <div className="oem-section-title" style={{ marginTop: 18 }}>Payment Collection Status</div>
       {(() => {
         const myEntry = adminUsers.find(u => u.is_me);
-        // Allow only when: no one selected, OR the selected person is confirmed as me
-        const canMarkReceived = !receivedBy || (myEntry ? receivedBy === myEntry.name : false);
+        // Allow when: no one selected, OR "Business Account" (open to all), OR the selected person is me
+        const canMarkReceived = !receivedBy || receivedBy === 'Business Account' || (myEntry ? receivedBy === myEntry.name : false);
         return (
           <div className="oem-radio-group">
             <label className="oem-radio-label">

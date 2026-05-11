@@ -14,6 +14,8 @@
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 const DEFAULT_TIMEOUT_MS = 15_000;
 
+import { emitLoading } from './loadingBus';
+
 // ---------------------------------------------------------------------------
 // Core request helper
 // ---------------------------------------------------------------------------
@@ -23,6 +25,7 @@ async function _request(path, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  emitLoading(true);
   try {
     const response = await fetch(url, {
       ...options,
@@ -51,6 +54,8 @@ async function _request(path, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
       throw new Error('Request timed out. Please check your connection and try again.');
     }
     throw err;
+  } finally {
+    emitLoading(false);
   }
 }
 
