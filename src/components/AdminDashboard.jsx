@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import OrderEditModal from './OrderEditModal';
 import OrderHistoryModal from './OrderHistoryModal';
+import BulkOrderUpload from './BulkOrderUpload';
 
 /** Inline shipment picker used inside the expanded order detail row. */
 function ShipmentSelect({ shipments, currentId, onSave }) {
@@ -594,6 +595,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
   const [dsShowPhone, setDsShowPhone] = useState(true);
   const [dsShowTag, setDsShowTag] = useState(true);
+  const [dsShowBlock, setDsShowBlock] = useState(true);
+  const [dsShowName, setDsShowName] = useState(true);
+  const [dsShowType, setDsShowType] = useState(true);
   const [dsSelectedItems, setDsSelectedItems] = useState(null); // null = all selected
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
@@ -1880,6 +1884,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               { key: 'locations',     label: '📍 Locations' },
               { key: 'products',      label: '🥭 Products' },
               { key: 'promos',        label: '🎟️ Promos' },
+              { key: 'bulk-import',   label: '📋 Bulk Orders' },
               { key: 'site-messages', label: '📢 Site Messages' },
               { key: 'ads',           label: '🖼️ Ads' },
             ].map(({ key, label }) => (
@@ -2088,6 +2093,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${deliverySubTab === 'boys' ? ' active' : ''}`}
                 onClick={() => { setDeliverySubTab('boys'); fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }}
               >🛵 Delivery Boys</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'portal' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('portal'); fetchDeliveryBoys(); fetchAssignedOrders(); }}
+              >🗂️ Delivery Report</button>
             </div>
 
             {/* ── Tags tab ── */}
@@ -2526,6 +2535,83 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
             </>}
 
+            {/* ── Delivery Report (portal view) sub-tab ── */}
+            {deliverySubTab === 'portal' && (
+              <div className="delivery-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h2>🗂️ Delivery Report</h2>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select
+                      value={assignedFilter.delivery_boy_id}
+                      onChange={e => { handleAssignedFilterChange('delivery_boy_id', e.target.value); }}
+                      className="orders-filter-select"
+                    >
+                      <option value="">All Delivery Boys</option>
+                      {deliveryBoys.map(b => (
+                        <option key={b.id} value={b.id}>{b.full_name || b.username}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={assignedFilter.order_status}
+                      onChange={e => handleAssignedFilterChange('order_status', e.target.value)}
+                      className="orders-filter-select"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="shipped">Shipped</option>
+                      <option value="delivered">Delivered</option>
+                    </select>
+                    <button className="orders-clear-btn" onClick={() => fetchAssignedOrders(assignedFilter)} style={{ background: '#e0f2fe', borderColor: '#7dd3fc' }}>
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {assignedLoading ? (
+                  <MangoLoader text="Loading…" />
+                ) : assignedOrders.length === 0 ? (
+                  <p style={{ color: '#6b7280' }}>No assigned delivery orders found.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {assignedOrders.map(order => {
+                      const isDelivered = order.order_status === 'delivered';
+                      const block = order.delivery_address?.split(',')[0]?.trim() || '—';
+                      return (
+                        <div key={order.id} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden', opacity: isDelivered ? 0.65 : 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', gap: 0 }}>
+                            {/* Order ref + address */}
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 14, color: '#111' }}>{order.order_ref}</div>
+                              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{order.delivery_address || '—'}</div>
+                              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 1 }}>👤 {order.customer_name} · 📞 {order.customer_phone || '—'}</div>
+                            </div>
+                            {/* Block column */}
+                            <div style={{ minWidth: 100, textAlign: 'center', borderLeft: '1px solid #F3F4F6', padding: '0 12px' }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Block / Unit</div>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>{block}</div>
+                            </div>
+                            {/* Assigned to */}
+                            <div style={{ minWidth: 100, textAlign: 'center', borderLeft: '1px solid #F3F4F6', padding: '0 12px' }}>
+                              <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Assigned To</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{order.delivery_boy_name || '—'}</div>
+                            </div>
+                            {/* Status badge */}
+                            <div style={{ marginLeft: 12 }}>
+                              {isDelivered
+                                ? <span style={{ background: '#D1FAE5', color: '#065F46', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>✅ Delivered</span>
+                                : <span style={{ background: '#FEF3C7', color: '#D97706', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>⏳ {order.order_status}</span>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── Delivery Sheet sub-tab ── */}
             {deliverySubTab === 'delivery-sheet' && (() => {
               const dsFiltered = reportOrders
@@ -2561,10 +2647,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
                   : o.delivery_address.trim();
                 const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
-                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: extractPostal(addr), _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null };
+                const _block = o.delivery_type === 'delivery' ? (o.delivery_address?.split(',')[0]?.trim() || '') : '';
+                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: extractPostal(addr), _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null, _block, _wt: {} };
                 (o.items || []).forEach(it => {
                   const v = stripStd(it.variant);
-                  if (v) addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
+                  if (v) {
+                    addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
+                    if (it.box_weight != null) addressMap[addr]._wt[v] = (addressMap[addr]._wt[v] || 0) + (it.qty || 0) * it.box_weight;
+                  }
                 });
               });
               const addresses = Object.keys(addressMap).sort();
@@ -2651,7 +2741,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 addresses.map(addr => {
                   const row = addressMap[addr];
                   const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
-                  return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total };
+                  return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', block: row._block || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total, _wt: row._wt || {} };
                 }).filter(r => r.total > 0),
                 deliverySort.col, deliverySort.dir
               );
@@ -2729,6 +2819,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           <input type="checkbox" checked={dsShowPhone} onChange={e => setDsShowPhone(e.target.checked)} />
                           Mobile No.
                         </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={dsShowBlock} onChange={e => setDsShowBlock(e.target.checked)} />
+                          Block / Unit
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={dsShowType} onChange={e => setDsShowType(e.target.checked)} />
+                          Type
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer', userSelect: 'none' }}>
+                          <input type="checkbox" checked={dsShowName} onChange={e => setDsShowName(e.target.checked)} />
+                          Customer
+                        </label>
                       </div>
                       {allVariants.length > 0 && (
                         <>
@@ -2765,6 +2867,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       )}
                     </div>
                   )}
+
 
                   {/* ── Address drill-down ── */}
                   {dsAddressFilter && (() => {
@@ -2946,11 +3049,30 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           </button>
                         </div>
                       )}
+                      {dsSelectedAddrs.size > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '8px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, marginBottom: 10 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>Boxes for selected rows:</span>
+                          {visibleVariants.map(v => {
+                            const total = deliveryRows.filter(r => dsSelectedAddrs.has(r.addr)).reduce((s, r) => s + (r[v] || 0), 0);
+                            return total > 0 ? (
+                              <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 12, background: '#dcfce7', border: '1px solid #86efac', fontSize: 12, fontWeight: 600, color: '#15803d', whiteSpace: 'nowrap' }}>
+                                {v}: <strong style={{ color: '#166534' }}>{total}</strong>
+                              </span>
+                            ) : null;
+                          })}
+                          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#166534', whiteSpace: 'nowrap' }}>
+                            Total: {visibleVariants.reduce((s, v) => s + deliveryRows.filter(r => dsSelectedAddrs.has(r.addr)).reduce((ss, r) => ss + (r[v] || 0), 0), 0)}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                            Weight: {visibleVariants.reduce((s, v) => s + deliveryRows.filter(r => dsSelectedAddrs.has(r.addr)).reduce((ss, r) => ss + (r._wt[v] || 0), 0), 0).toFixed(2)} kg
+                          </span>
+                        </div>
+                      )}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
-                          const hdrs = [...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', 'Type', 'Customer', ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total'];
-                          const rows = deliveryRows.map(r => [...(dsShowTag ? [r.tagName || ''] : []), r.addr, r.postal || '', r.type, r.name, ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)]);
-                          rows.push([...(dsShowTag ? [''] : []), 'TOTAL', '', '', '', ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
+                          const hdrs = [...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', ...(dsShowBlock ? ['Block / Unit'] : []), ...(dsShowType ? ['Type'] : []), ...(dsShowName ? ['Customer'] : []), ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total', 'Weight (kg)'];
+                          const rows = deliveryRows.map(r => [...(dsShowTag ? [r.tagName || ''] : []), r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim(), r.postal || '', ...(dsShowBlock ? [r.block || ''] : []), ...(dsShowType ? [r.type] : []), ...(dsShowName ? [r.name] : []), ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0), visibleVariants.reduce((s, v) => s + (r._wt[v] || 0), 0).toFixed(2)]);
+                          rows.push([...(dsShowTag ? [''] : []), 'TOTAL', '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0), visibleVariants.reduce((s, v) => s + addresses.reduce((ss, a) => ss + (addressMap[a]._wt?.[v] || 0), 0), 0).toFixed(2)]);
                           downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
@@ -2972,19 +3094,24 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               {dsShowTag && <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />}
                               <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
                               <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
-                              <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />
-                              <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />
+                              {dsShowBlock && <SortTh label="Block / Unit" colKey="block" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />}
+                              {dsShowType && <SortTh label="Type" colKey="type" sort={deliverySort} onSort={toggleDeliverySort} />}
+                              {dsShowName && <SortTh label="Customer" colKey="name" sort={deliverySort} onSort={toggleDeliverySort} />}
                               {dsShowPhone && <SortTh label="Mobile No." colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />}
                               {visibleVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
                               <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
+                              <th style={{ whiteSpace: 'nowrap', color: '#1e40af' }}>Weight (kg)</th>
                             </tr>
                           </thead>
                           <tbody>
                             {deliveryRows.map(r => {
                               const _rc = r.tagId ? tagPaletteColor(r.tagId) : null;
-                              const rowStyle = _rc
-                                ? { background: _rc + '18', borderLeft: `3px solid ${_rc}88` }
-                                : (r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined);
+                              const _badBlock = r.block && !/\d/.test(r.block);
+                              const rowStyle = _badBlock
+                                ? { background: '#fee2e2', borderLeft: '3px solid #ef4444' }
+                                : _rc
+                                  ? { background: _rc + '18', borderLeft: `3px solid ${_rc}88` }
+                                  : (r.type === 'Home Delivery' && r.total > 5 ? { background: '#fef9c3', borderLeft: '3px solid #eab308' } : undefined);
                               return (
                               <tr key={r.addr} style={rowStyle}>
                                 <td style={{ textAlign: 'center', padding: '4px 6px' }}>
@@ -3008,27 +3135,32 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                       : <span style={{ color: '#d1d5db' }}>—</span>}
                                   </td>
                                 )}
-                                <td className="report-loc-name" style={{ fontSize: 12, cursor: 'pointer', color: '#2563eb', textDecoration: 'underline dotted' }} onClick={() => setDsAddressFilter(r.addr)} title="View all orders for this address">{r.addr}</td>
+                                <td className="report-loc-name" style={{ fontSize: 12, cursor: 'pointer', color: '#2563eb', textDecoration: 'underline dotted' }} onClick={() => setDsAddressFilter(r.addr)} title="View all orders for this address">{r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim()}</td>
                                 <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.postal || '—'}</td>
-                                <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                                  <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7', color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d' }}>{r.type}</span>
-                                </td>
-                                <td style={{ fontSize: 12 }}>{r.name}</td>
+                                {dsShowBlock && <td style={{ fontSize: 12, fontWeight: 700, color: r.block ? '#111' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.block || '—'}</td>}
+                                {dsShowType && (
+                                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                                    <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'Self Collection' ? '#dbeafe' : '#dcfce7', color: r.type === 'Self Collection' ? '#1d4ed8' : '#15803d' }}>{r.type}</span>
+                                  </td>
+                                )}
+                                {dsShowName && <td style={{ fontSize: 12 }}>{r.name}</td>}
                                 {dsShowPhone && <td style={{ fontSize: 12 }}>{r.phone}</td>}
                                 {visibleVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
                                 <td className="report-row-total">{visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)}</td>
+                                <td className="report-row-total" style={{ color: '#1e40af' }}>{visibleVariants.reduce((s, v) => s + (r._wt[v] || 0), 0).toFixed(2)}</td>
                               </tr>
                               );
                             })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
-                              <td colSpan={5 + (dsShowTag ? 1 : 0) + (dsShowPhone ? 1 : 0)}><strong>Total</strong></td>
+                              <td colSpan={3 + (dsShowTag ? 1 : 0) + (dsShowBlock ? 1 : 0) + (dsShowType ? 1 : 0) + (dsShowName ? 1 : 0) + (dsShowPhone ? 1 : 0)}><strong>Total</strong></td>
                               {visibleVariants.map(v => {
                                 const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
                               })}
                               <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
+                              <td className="report-row-total" style={{ color: '#1e40af' }}><strong>{visibleVariants.reduce((s, v) => s + addresses.reduce((ss, a) => ss + (addressMap[a]._wt?.[v] || 0), 0), 0).toFixed(2)} kg</strong></td>
                             </tr>
                           </tfoot>
                         </table>
@@ -4297,6 +4429,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           <div className="dashboard-section">
             <PromoManager headers={headers} />
           </div>
+        )}
+
+        {activeTab === 'manage' && manageSubTab === 'bulk-import' && (
+          <BulkOrderUpload />
         )}
 
         {activeTab === 'reports' && reportSubTab !== 'all-orders' && (() => {

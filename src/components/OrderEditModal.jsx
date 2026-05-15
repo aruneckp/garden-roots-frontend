@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { API_BASE } from '../services/api';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_BASE, deliveryFeeApi } from '../services/api';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 const PAYMENT_STATUS_OPTIONS = ['pending', 'succeeded', 'failed', 'cancelled'];
@@ -317,13 +317,34 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
     }))
   );
 
+  const [postalCode,   setPostalCode]   = useState(order.postal_code || '');
+  const [deliveryFee,  setDeliveryFee]  = useState(parseFloat(order.delivery_fee) || 0);
+  const [feeLoading,   setFeeLoading]   = useState(false);
+  const [feeError,     setFeeError]     = useState('');
+
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
   // Derived totals
-  const subtotal    = items.reduce((s, it) => s + it.unit_price * it.quantity, 0);
-  const deliveryFee = parseFloat(order.delivery_fee) || 0;
-  const total       = subtotal + deliveryFee;
+  const subtotal = items.reduce((s, it) => s + it.unit_price * it.quantity, 0);
+  const total    = subtotal + deliveryFee;
+
+  const fetchDeliveryFee = useCallback(async (postal, cartSubtotal) => {
+    if (!postal || !/^\d{6}$/.test(postal)) {
+      setFeeError('Enter a 6-digit postal code to calculate the delivery fee.');
+      return;
+    }
+    setFeeLoading(true);
+    setFeeError('');
+    try {
+      const result = await deliveryFeeApi.getFee(postal, cartSubtotal);
+      setDeliveryFee(parseFloat(result.fee) || 0);
+    } catch {
+      setFeeError('Could not calculate delivery fee. It will be computed on save.');
+    } finally {
+      setFeeLoading(false);
+    }
+  }, []);
 
   // Add a specific variant from the active products list
   const handleAddVariant = (product, variant) => {
@@ -380,6 +401,7 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
           customer_email:     customerEmail     || null,
           customer_phone:     customerPhone     || null,
           delivery_address:   deliveryType === 'delivery' ? (deliveryAddress || null) : null,
+          postal_code:        deliveryType === 'delivery' ? (postalCode || null) : null,
           customer_notes:     customerNotes     || null,
           order_status:       orderStatus,
           payment_status:     paymentStatus,
@@ -490,14 +512,26 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
             <div className="oem-delivery-toggle">
               <button
                 className={`oem-delivery-btn${deliveryType === 'delivery' ? ' active' : ''}`}
-                onClick={() => setDeliveryType('delivery')}
+                onClick={() => {
+                  if (deliveryType !== 'delivery') {
+                    setDeliveryType('delivery');
+                    setFeeError('');
+                    fetchDeliveryFee(postalCode, subtotal);
+                  }
+                }}
                 type="button"
               >
                 🚚 Home Delivery
               </button>
               <button
                 className={`oem-delivery-btn${deliveryType === 'pickup' ? ' active' : ''}`}
-                onClick={() => setDeliveryType('pickup')}
+                onClick={() => {
+                  if (deliveryType !== 'pickup') {
+                    setDeliveryType('pickup');
+                    setDeliveryFee(0);
+                    setFeeError('');
+                  }
+                }}
                 type="button"
               >
                 📍 Self-Collection
@@ -510,6 +544,30 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                 <textarea className="oem-input oem-textarea" value={deliveryAddress}
                   onChange={e => setDeliveryAddress(e.target.value)} rows={2}
                   placeholder="Enter full delivery address" />
+
+                <label className="oem-label">Postal Code</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="oem-input"
+                    style={{ flex: 1 }}
+                    value={postalCode}
+                    onChange={e => setPostalCode(e.target.value)}
+                    placeholder="6-digit postal code"
+                    maxLength={6}
+                  />
+                  <button
+                    type="button"
+                    className="oem-save-btn"
+                    style={{ padding: '7px 14px', fontSize: 13, whiteSpace: 'nowrap' }}
+                    onClick={() => fetchDeliveryFee(postalCode, subtotal)}
+                    disabled={feeLoading}
+                  >
+                    {feeLoading ? 'Calculating…' : 'Calculate Fee'}
+                  </button>
+                </div>
+                {feeError && (
+                  <div className="oem-error" style={{ marginTop: 4 }}>{feeError}</div>
+                )}
               </>
             )}
 
@@ -611,7 +669,12 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                 <span>Subtotal</span><span>${subtotal.toFixed(2)}</span>
               </div>
               <div className="oem-total-row">
-                <span>Delivery fee</span><span>${deliveryFee.toFixed(2)}</span>
+                <span>Delivery fee</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {feeLoading
+                    ? <span style={{ color: '#9ca3af', fontSize: 12 }}>Calculating…</span>
+                    : `$${deliveryFee.toFixed(2)}`}
+                </span>
               </div>
               <div className="oem-total-row oem-grand-total">
                 <span>Total</span><span>${total.toFixed(2)}</span>

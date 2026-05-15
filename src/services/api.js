@@ -108,6 +108,9 @@ export const orderApi = {
 
   getOrder:       (orderId) => get(`/api/v1/orders/${orderId}`),
   getOrderStatus: (orderId) => get(`/api/v1/orders/${orderId}/status`),
+
+  createOrdersBulk: (orders, token) =>
+    post('/api/v1/orders/bulk', { orders }, authHeader(token)),
 };
 
 // ---------------------------------------------------------------------------

@@ -116,6 +116,10 @@ export default function DeliveryPortal({ onLogout }) {
                   <div style={styles.orderRef}>{order.order_ref}</div>
                   <div style={styles.orderAddr}>{order.delivery_address}</div>
                 </div>
+                <div style={styles.orderBlock}>
+                  <div style={styles.blockLabel}>Block / Unit</div>
+                  <div style={styles.blockValue}>{order.delivery_address?.split(',')[0]?.trim() || '—'}</div>
+                </div>
                 <div style={styles.orderRight}>
                   {isDelivered
                     ? <span style={styles.badgeDone}>✅ Delivered</span>
@@ -173,6 +177,9 @@ const styles = {
   orderLeft: { flex: 1 },
   orderRef: { fontWeight: 700, fontSize: 15, color: '#111' },
   orderAddr: { fontSize: 12, color: '#6B7280', marginTop: 3 },
+  orderBlock: { minWidth: 90, maxWidth: 110, textAlign: 'center', padding: '0 8px', borderLeft: '1px solid #F3F4F6' },
+  blockLabel: { fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 },
+  blockValue: { fontSize: 14, fontWeight: 700, color: '#111' },
   orderRight: { display: 'flex', alignItems: 'center', gap: 10 },
   badgePending: { background: '#FEF3C7', color: '#D97706', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 },
   badgeDone:    { background: '#D1FAE5', color: '#065F46', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600 },
