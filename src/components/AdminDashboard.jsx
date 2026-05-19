@@ -624,6 +624,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reportTagFilter, setReportTagFilter] = useState(new Set());
   const [reportSubTab, setReportSubTab] = useState('all-orders');
   const [addressFilter, setAddressFilter] = useState('');
+  const [showOrderFilters, setShowOrderFilters] = useState(false);
+  const [phoneSearch, setPhoneSearch] = useState('');
+  const [phoneFilter, setPhoneFilter] = useState('');
+  const [phoneSuggestions, setPhoneSuggestions] = useState([]);
   const [orderColVisibility, setOrderColVisibility] = useState({ phone: false, method: false, tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false, items: false });
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
@@ -4155,8 +4159,109 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
             {/* ── Filter panel ── */}
             <div className="orders-filter-panel">
+              {/* Collapse toggle */}
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setShowOrderFilters(p => !p)}
+              >
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>
+                  {showOrderFilters ? '▾' : '▸'} Filters
+                </span>
+                {(Object.values(orderFilters).some(v => Array.isArray(v) ? v.length > 0 : !!v) || phoneFilter || addressFilter) && (
+                  <span style={{ fontSize: 11, background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', borderRadius: 10, padding: '1px 8px', fontWeight: 600 }}>
+                    active
+                  </span>
+                )}
+              </div>
+
+              {/* Mobile number search — always visible */}
+              <div className="orders-filter-row" style={{ paddingTop: 8, marginTop: 6, position: 'relative' }}>
+                <span className="filter-type-label"><strong>Mobile:</strong></span>
+                <div style={{ position: 'relative', flex: '0 0 220px' }}>
+                  <input
+                    type="text"
+                    placeholder="Type 4+ digits to search…"
+                    value={phoneSearch}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setPhoneSearch(val);
+                      const digits = val.replace(/\D/g, '');
+                      if (digits.length >= 4) {
+                        const re = new RegExp(digits);
+                        const matchMap = {};
+                        allOrders.forEach(o => {
+                          if (!o.customer_phone) return;
+                          if (!re.test(o.customer_phone.replace(/\D/g, ''))) return;
+                          if (!matchMap[o.customer_phone]) matchMap[o.customer_phone] = new Set();
+                          const addr = o.delivery_type === 'pickup'
+                            ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                            : (o.delivery_address || '');
+                          if (addr && addr.trim()) matchMap[o.customer_phone].add(addr.trim());
+                        });
+                        const matches = Object.entries(matchMap)
+                          .map(([phone, addrs]) => ({ phone, addresses: [...addrs] }))
+                          .sort((a, b) => a.phone.localeCompare(b.phone));
+                        setPhoneSuggestions(matches);
+                      } else {
+                        setPhoneSuggestions([]);
+                        if (!val) setPhoneFilter('');
+                      }
+                    }}
+                    style={{
+                      width: '100%', padding: '6px 10px', border: '1px solid #d1d5db',
+                      borderRadius: 6, fontSize: 13, outline: 'none',
+                      borderColor: phoneFilter ? '#16a34a' : '#d1d5db',
+                      background: phoneFilter ? '#f0fdf4' : '#fff',
+                    }}
+                  />
+                  {phoneSuggestions.length > 0 && !phoneFilter && (
+                    <ul style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                      background: '#fff', border: '1px solid #d1d5db', borderRadius: 6,
+                      margin: '2px 0 0', padding: 0, listStyle: 'none',
+                      maxHeight: 260, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                    }}>
+                      {phoneSuggestions.map(({ phone, addresses }) => (
+                        <li
+                          key={phone}
+                          onClick={() => {
+                            setPhoneFilter(phone);
+                            setPhoneSearch(phone);
+                            setPhoneSuggestions([]);
+                          }}
+                          style={{
+                            padding: '8px 12px', cursor: 'pointer',
+                            borderBottom: '1px solid #f3f4f6',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>📱 {phone}</div>
+                          {addresses.map((addr, i) => (
+                            <div key={i} style={{ fontSize: 11, color: '#6b7280', marginTop: 2, paddingLeft: 20 }}>
+                              📍 {addr}
+                            </div>
+                          ))}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {phoneFilter && (
+                  <button
+                    onClick={() => { setPhoneFilter(''); setPhoneSearch(''); setPhoneSuggestions([]); }}
+                    style={{
+                      background: 'none', border: '1px solid #86efac', borderRadius: 6,
+                      padding: '4px 10px', cursor: 'pointer', color: '#15803d',
+                      fontWeight: 600, fontSize: 12,
+                    }}
+                  >✕ Clear</button>
+                )}
+              </div>
+
+              {showOrderFilters && <>
               {/* Row 1: horizontal toggle buttons */}
-              <div className="filter-checkbox-row">
+              <div className="filter-checkbox-row" style={{ marginTop: 10 }}>
                 <span className="filter-type-label"><strong>Filter Type:</strong></span>
                 {filterGroups.map(({ key, label }) => (
                   <button
@@ -4219,12 +4324,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     setActiveFilters({ delivery_type: false, payment_status: false, order_status: false, pickup_location_id: false, payment_method: false });
                     setOrderSelectedIds([]);
                     setAddressFilter('');
+                    setPhoneFilter('');
+                    setPhoneSearch('');
+                    setPhoneSuggestions([]);
                     fetchAllOrders(cleared);
                   }}
                 >
                   Clear All
                 </button>
               </div>
+              </>}
             </div>
 
             {/* ── Bulk status bar ── */}
@@ -4289,14 +4398,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className="report-download-btn"
                 disabled={allOrders.length === 0}
                 onClick={() => {
-                  const filtered = addressFilter
-                    ? allOrders.filter(o => {
-                        const addr = o.delivery_type === 'pickup'
-                          ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
-                          : (o.delivery_address || '');
-                        return addr.trim() === addressFilter;
-                      })
-                    : allOrders;
+                  const filtered = allOrders.filter(o => {
+                    if (addressFilter) {
+                      const addr = o.delivery_type === 'pickup'
+                        ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                        : (o.delivery_address || '');
+                      if (addr.trim() !== addressFilter) return false;
+                    }
+                    if (phoneFilter && (o.customer_phone || '') !== phoneFilter) return false;
+                    return true;
+                  });
 
                   const headers = [
                     'Order Ref', 'Customer', 'Mode', 'Location / Address',
@@ -4374,14 +4485,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               <p style={{ color: '#6b7280', marginTop: 16 }}>No orders match the selected filters.</p>
             ) : (() => {
               const toggleAllOrdersSort = col => setAllOrdersSort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
-              const baseOrders = addressFilter
-                ? allOrders.filter(o => {
-                    const addr = o.delivery_type === 'pickup'
-                      ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
-                      : (o.delivery_address || '');
-                    return addr.trim() === addressFilter;
-                  })
-                : allOrders;
+              const baseOrders = allOrders.filter(o => {
+                if (addressFilter) {
+                  const addr = o.delivery_type === 'pickup'
+                    ? (o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                    : (o.delivery_address || '');
+                  if (addr.trim() !== addressFilter) return false;
+                }
+                if (phoneFilter && (o.customer_phone || '') !== phoneFilter) return false;
+                return true;
+              });
               const sortableOrders = baseOrders.map(o => ({
                 ...o,
                 _location: o.delivery_type === 'pickup'

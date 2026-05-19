@@ -108,6 +108,8 @@ export const orderApi = {
 
   getOrder:       (orderId) => get(`/api/v1/orders/${orderId}`),
   getOrderStatus: (orderId) => get(`/api/v1/orders/${orderId}/status`),
+  lookupAddressByPhone: (phone, token) =>
+    get(`/api/v1/orders/address-lookup?phone=${encodeURIComponent(phone)}`, authHeader(token)),
 
   createOrdersBulk: (orders, token) =>
     post('/api/v1/orders/bulk', { orders }, authHeader(token)),

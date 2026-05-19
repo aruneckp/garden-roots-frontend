@@ -88,6 +88,11 @@ export default function Checkout() {
   // True once the delivery fee API has resolved (used as gate for checkout validation)
   const [deliveryFeeLoaded,  setDeliveryFeeLoaded]  = useState(false);
 
+  // Address auto-fill from previous orders by phone
+  const [addressSuggestions,  setAddressSuggestions]  = useState([]);  // [] | [{delivery_address, postal_code, unit_no, street, order_count, last_used}]
+  const [addressAutoFilled,   setAddressAutoFilled]   = useState(false); // true when single match was silently applied
+  const phoneDebounceRef = useRef(null);
+
   const handleDeliveryFeeChange = useCallback((fee) => {
     setDynamicDeliveryFee(fee);
     setDeliveryFeeLoaded(true);
@@ -108,8 +113,48 @@ export default function Checkout() {
       setDeliveryStreet('');
       setDeliveryUnitNo('');
       setDeliveryFeeLoaded(false);
+      setAddressSuggestions([]);
+      setAddressAutoFilled(false);
     }
   }, [deliveryType]);
+
+  // Debounced address lookup — only for logged-in users (admin or regular user with matching phone)
+  useEffect(() => {
+    if (!user || !userToken) return;           // guests see nothing
+    if (deliveryType !== 'delivery') return;
+    const digits = customerForm.phone.replace(/\D/g, '');
+    if (digits.length < 8) {
+      setAddressSuggestions([]);
+      setAddressAutoFilled(false);
+      return;
+    }
+    clearTimeout(phoneDebounceRef.current);
+    phoneDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await orderApi.lookupAddressByPhone(customerForm.phone, userToken);
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        if (list.length === 1) {
+          const s = list[0];
+          if (s.postal_code) {
+            setDeliveryPostalCode(s.postal_code);
+            setDeliveryFeeLoaded(false);
+            setDeliveryArea('');
+            setDeliveryStreet(s.street || '');
+          }
+          setDeliveryUnitNo(s.unit_no || '');
+          setAddressAutoFilled(true);
+          setAddressSuggestions([]);
+        } else if (list.length > 1) {
+          setAddressSuggestions(list);
+          setAddressAutoFilled(false);
+        } else {
+          setAddressSuggestions([]);
+          setAddressAutoFilled(false);
+        }
+      } catch (_) { /* silent — never block checkout */ }
+    }, 600);
+    return () => clearTimeout(phoneDebounceRef.current);
+  }, [customerForm.phone, deliveryType, user, userToken]);
 
   // Constructed delivery address from structured fields
   const deliveryAddress = (deliveryStreet || deliveryArea)
@@ -722,7 +767,89 @@ export default function Checkout() {
                 {/* Delivery address — postal code → area auto-detected → unit no */}
                 {deliveryType === 'delivery' && (
                   <>
-                    {/* 1. Postal Code */}
+                    {/* Auto-fill banner — single previous address found */}
+                    {addressAutoFilled && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, marginBottom: 4, fontSize: 13 }}>
+                        <span style={{ fontSize: 15 }}>✓</span>
+                        <span style={{ flex: 1, color: '#15803D', fontWeight: 500 }}>Address filled from your last order</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddressAutoFilled(false);
+                            setDeliveryPostalCode('');
+                            setDeliveryArea('');
+                            setDeliveryStreet('');
+                            setDeliveryUnitNo('');
+                            setDeliveryFeeLoaded(false);
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: 16, lineHeight: 1, padding: 0 }}
+                          aria-label="Clear auto-filled address"
+                        >✕</button>
+                      </div>
+                    )}
+
+                    {/* Address picker — multiple previous addresses found */}
+                    {addressSuggestions.length > 1 && (
+                      <div style={{ marginBottom: 8, borderRadius: 10, border: '1px solid #D1FAE5', background: '#F9FAFB', overflow: 'hidden' }}>
+                        <div style={{ padding: '9px 13px', background: '#ECFDF5', borderBottom: '1px solid #D1FAE5', fontSize: 12, fontWeight: 600, color: '#065F46', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          Previous delivery addresses
+                        </div>
+                        {addressSuggestions.map((s, i) => {
+                          const dateLabel = s.last_used
+                            ? new Date(s.last_used).toLocaleDateString('en-SG', { month: 'short', year: 'numeric' })
+                            : null;
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => {
+                                if (s.postal_code) {
+                                  setDeliveryPostalCode(s.postal_code);
+                                  setDeliveryFeeLoaded(false);
+                                  setDeliveryArea('');
+                                  setDeliveryStreet(s.street || '');
+                                }
+                                setDeliveryUnitNo(s.unit_no || '');
+                                setAddressSuggestions([]);
+                                setAddressAutoFilled(true);
+                              }}
+                              style={{
+                                display: 'block', width: '100%', textAlign: 'left',
+                                padding: '10px 13px', background: 'none', border: 'none',
+                                borderBottom: i < addressSuggestions.length - 1 ? '1px solid #E5E7EB' : 'none',
+                                cursor: 'pointer', fontSize: 13, lineHeight: 1.4,
+                              }}
+                            >
+                              <div style={{ fontWeight: 500, color: 'var(--dark)', marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {s.delivery_address}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#6B7280' }}>
+                                {s.order_count} order{s.order_count !== 1 ? 's' : ''}{dateLabel ? ` · Last used ${dateLabel}` : ''}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setAddressSuggestions([])}
+                          style={{ display: 'block', width: '100%', padding: '8px 13px', background: 'none', border: 'none', borderTop: '1px solid #E5E7EB', cursor: 'pointer', fontSize: 12, color: '#6B7280', textAlign: 'center' }}
+                        >
+                          Enter a different address
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 1. Unit / Block Number */}
+                    <div className="card-field">
+                      <label>Block / Unit Number *</label>
+                      <input
+                        placeholder="#05-123  or  Blk 521"
+                        value={deliveryUnitNo}
+                        onChange={e => setDeliveryUnitNo(e.target.value)}
+                      />
+                    </div>
+
+                    {/* 2. Postal Code */}
                     <div className="card-field">
                       <label>Postal Code *</label>
                       <input
@@ -746,7 +873,7 @@ export default function Checkout() {
                       )}
                     </div>
 
-                    {/* 2. Auto-detected address + fee (shown once 6 digits entered) */}
+                    {/* 3. Auto-detected address + fee (shown once 6 digits entered) */}
                     {deliveryPostalCode.length === 6 && (
                       <div className="card-field">
                         <SimpleDeliveryFee
@@ -761,7 +888,7 @@ export default function Checkout() {
                       </div>
                     )}
 
-                    {/* 3. Auto-populated street address (editable in case user needs to correct) */}
+                    {/* 4. Auto-populated street address (editable in case user needs to correct) */}
                     {deliveryStreet && (
                       <div className="card-field">
                         <label>Street Address <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(auto-filled)</span></label>
@@ -771,16 +898,6 @@ export default function Checkout() {
                         />
                       </div>
                     )}
-
-                    {/* 4. Unit / Block Number */}
-                    <div className="card-field">
-                      <label>Block / Unit Number *</label>
-                      <input
-                        placeholder="#05-123  or  Blk 521"
-                        value={deliveryUnitNo}
-                        onChange={e => setDeliveryUnitNo(e.target.value)}
-                      />
-                    </div>
                   </>
                 )}
 

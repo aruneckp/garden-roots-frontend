@@ -424,6 +424,13 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
     }
   };
 
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // Trap Escape key
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
