@@ -3,6 +3,7 @@ import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
 import PromoManager from './PromoManager';
+import SelfCollectionPopups from './SelfCollectionPopups';
 import MangoLoader from './MangoLoader';
 import { API_BASE } from '../services/api';
 import { useApp } from '../context/AppContext';
@@ -309,6 +310,9 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
                                   <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
                                     {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
                                   </span>
+                                  {o.original_delivery_type === 'pickup' && o.delivery_type === 'delivery' && (
+                                    <span title="Originally placed as Self-Collection" style={{ display: 'inline-block', marginLeft: 4, fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle', cursor: 'default' }}>🔄 was Pickup</span>
+                                  )}
                                 </td>
                                 <td className="orders-address-cell">
                                   {o.delivery_type === 'pickup'
@@ -317,9 +321,16 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
                                 </td>
                                 <td><span className={`status-badge status-${o.order_status}`}>{o.order_status}</span></td>
                                 <td>
-                                  <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>
-                                    {o.payment_status}
-                                  </span>
+                                  {o.delivery_type === 'pickup' && o.payment_status === 'succeeded' ? (
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '2px solid #dc2626', borderRadius: 6, padding: '1px 6px' }}>
+                                      <span className="status-badge status-completed" style={{ margin: 0 }}>{o.payment_status}</span>
+                                      <span title="Self-collection order with successful payment — verify pickup was completed" style={{ color: '#dc2626', fontWeight: 700, fontSize: 13, cursor: 'help', lineHeight: 1 }}>ⓘ</span>
+                                    </span>
+                                  ) : (
+                                    <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>
+                                      {o.payment_status}
+                                    </span>
+                                  )}
                                 </td>
                                 <td style={{ fontSize: 12 }}>{o.payment_method || '—'}</td>
                                 <td style={{ fontSize: 12 }}>
@@ -363,7 +374,11 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
                                         </div>
                                         <div className="order-detail-block">
                                           <div className="order-detail-label">Delivery Info</div>
-                                          <p><strong>Type:</strong> {o.delivery_type === 'pickup' ? 'Self Pickup' : 'Home Delivery'}</p>
+                                          <p><strong>Type:</strong> {o.delivery_type === 'pickup' ? 'Self Pickup' : 'Home Delivery'}
+                                            {o.original_delivery_type === 'pickup' && o.delivery_type === 'delivery' && (
+                                              <span title="Originally placed as Self-Collection" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 4, padding: '1px 5px' }}>🔄 was Pickup</span>
+                                            )}
+                                          </p>
                                           {o.delivery_type === 'pickup'
                                             ? <p><strong>Location:</strong> {o.pickup_location_name || `#${o.pickup_location_id}`}</p>
                                             : <p><strong>Address:</strong> {o.delivery_address || '—'}</p>}
@@ -378,7 +393,11 @@ function ShipmentsView({ shipments, headers, API_BASE }) {
                                           <p>{o.customer_email || '—'}</p>
                                           <p>{o.customer_phone || '—'}</p>
                                           <div className="order-detail-label" style={{ marginTop: 12 }}>Payment</div>
-                                          <p><strong>Status:</strong> {o.payment_status}</p>
+                                          <p><strong>Status:</strong> {o.payment_status}
+                                            {o.delivery_type === 'pickup' && o.payment_status === 'succeeded' && (
+                                              <span title="Self-collection order with successful payment — verify pickup was completed" style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#dc2626', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4, padding: '1px 5px' }}>ⓘ Self-Collection Paid</span>
+                                            )}
+                                          </p>
                                           <p><strong>Method:</strong> {o.payment_method || '—'}</p>
                                         </div>
                                       </div>
@@ -530,6 +549,31 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   // Delivery sub-tab
   const [deliverySubTab, setDeliverySubTab] = useState('delivery-sheet');
 
+  // CSV Import sub-tab state
+  const [csvRows, setCsvRows] = useState([]);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvError, setCsvError] = useState('');
+  const [csvSelected, setCsvSelected] = useState(new Set());
+  const [csvBulkStatus, setCsvBulkStatus] = useState('');
+  const [csvBulkTagId, setCsvBulkTagId] = useState('');
+  const [csvBulkLoading, setCsvBulkLoading] = useState(false);
+  const [csvBulkResult, setCsvBulkResult] = useState(null);
+
+  // Bulk Reconcile sub-tab state
+  const [reconcileRefs, setReconcileRefs] = useState([]);
+  const [reconcileFileName, setReconcileFileName] = useState('');
+  const [reconcileError, setReconcileError] = useState('');
+  const [reconcileOrders, setReconcileOrders] = useState([]);
+  const [reconcileNotFound, setReconcileNotFound] = useState([]);
+  const [reconcileSelected, setReconcileSelected] = useState(new Set());
+  const [reconcileLoading, setReconcileLoading] = useState(false);
+  const [reconcileBulkStatus, setReconcileBulkStatus] = useState('');
+  const [reconcileBulkTagId, setReconcileBulkTagId] = useState('');
+  const [reconcileBulkLoading, setReconcileBulkLoading] = useState(false);
+  const [reconcileBulkResult, setReconcileBulkResult] = useState(null);
+  const [reconcileLoaded, setReconcileLoaded] = useState(false);
+
   // Delivery tags state
   const [deliveryTags, setDeliveryTags] = useState([]);
   const [tagForm, setTagForm] = useState({ name: '', color: '#6b7280', is_active: 1 });
@@ -552,7 +596,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [savingStockId, setSavingStockId] = useState(null);
   const [stockErrors, setStockErrors] = useState({});       // { [productId]: string }
   const [showAddProduct, setShowAddProduct] = useState(false);
-  const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
+  const [addProductForm, setAddProductForm] = useState({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
   const [addProductSaving, setAddProductSaving] = useState(false);
   const [addProductError, setAddProductError] = useState('');
   const [editingProduct, setEditingProduct] = useState(null); // product object being edited
@@ -593,11 +637,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
   const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
-  const [dsShowPhone, setDsShowPhone] = useState(true);
-  const [dsShowTag, setDsShowTag] = useState(true);
-  const [dsShowBlock, setDsShowBlock] = useState(true);
-  const [dsShowName, setDsShowName] = useState(true);
-  const [dsShowType, setDsShowType] = useState(true);
+  const [dsShowPhone, setDsShowPhone] = useState(false);
+  const [dsShowTag, setDsShowTag] = useState(false);
+  const [dsShowBlock, setDsShowBlock] = useState(false);
+  const [dsShowName, setDsShowName] = useState(false);
+  const [dsShowType, setDsShowType] = useState(false);
+  const [dsShowOrderRefs, setDsShowOrderRefs] = useState(false);
   const [dsSelectedItems, setDsSelectedItems] = useState(null); // null = all selected
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
@@ -620,6 +665,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [adsUploadPreview, setAdsUploadPreview] = useState(null);
   const [adsUploading, setAdsUploading] = useState(false);
   const [deletingBanner, setDeletingBanner] = useState(null); // filename being deleted
+
+  // Transactions tab state
+  const [transSubTab, setTransSubTab] = useState('new');
+  const [adminUsersCombined, setAdminUsersCombined] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [pendingTransactions, setPendingTransactions] = useState([]);
+  const [transLoading, setTransLoading] = useState(false);
+  const [transError, setTransError] = useState('');
+  const [transSuccess, setTransSuccess] = useState('');
+  const [transForm, setTransForm] = useState({
+    amount: '', currency: 'SGD', description: '', transaction_date: new Date().toISOString().slice(0, 10),
+    recipient_id: '', recipient_admin_type: '',
+  });
+  const [transSubmitting, setTransSubmitting] = useState(false);
+  const [rejectModalTx, setRejectModalTx] = useState(null); // transaction being rejected
+  const [rejectReason, setRejectReason] = useState('');
+  const [transHistoryFilter, setTransHistoryFilter] = useState('all'); // 'all' | 'pending' | 'approved' | 'rejected'
 
 
   const token = localStorage.getItem('admin_token') || localStorage.getItem('user_token');
@@ -708,7 +770,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     if (deliverySubTab === 'delivery-sheet') { fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }
     if (deliverySubTab === 'boys') { fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }
     if (deliverySubTab === 'tags') fetchDeliveryTags();
+    if (deliverySubTab === 'csv-import') fetchDeliveryTags();
   }, [deliverySubTab]);
+
+  // Transactions tab bootstrap
+  useEffect(() => {
+    if (activeTab !== 'transactions') return;
+    fetchAdminUsersCombined();
+    fetchPendingTransactions();
+    fetchTransactions();
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'transactions') return;
+    if (transSubTab === 'pending') fetchPendingTransactions();
+    if (transSubTab === 'history') fetchTransactions();
+    if (transSubTab === 'new') fetchAdminUsersCombined();
+  }, [transSubTab]);
 
   // Re-fetch whenever a reports sub-tab is selected
   useEffect(() => {
@@ -1004,7 +1082,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       });
       if (res.ok) {
         setShowAddProduct(false);
-        setAddProductForm({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', size_name: 'Standard', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
+        setAddProductForm({ name: '', origin: '', tag: '', description: '', image_url: '', emoji: '', unit: 'box', price: '', currency: 'SGD', initial_stock: '' });
         await fetchAdminProducts();
         showToast('success', `Product "${addProductForm.name}" created.`);
       } else {
@@ -1302,6 +1380,102 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       const res = await fetch(`${API_BASE}/api/v1/admin/delivery-tags`, { headers });
       if (res.ok) setDeliveryTags(await res.json());
     } catch (_) {}
+  };
+
+  // ── Transactions ──
+  const fetchAdminUsersCombined = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/admin-users-combined`, { headers });
+      if (res.ok) {
+        setAdminUsersCombined(await res.json());
+      } else {
+        setTransError('Failed to load admin users list. Please refresh the page.');
+      }
+    } catch (_) {
+      setTransError('Network error loading admin users. Check your connection.');
+    }
+  };
+
+  const fetchTransactions = async () => {
+    setTransLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/transactions`, { headers });
+      if (res.ok) setTransactions(await res.json());
+    } catch (_) {}
+    setTransLoading(false);
+  };
+
+  const fetchPendingTransactions = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/transactions/pending-for-me`, { headers });
+      if (res.ok) setPendingTransactions(await res.json());
+    } catch (_) {}
+  };
+
+  const handleCreateTransaction = async (e) => {
+    e.preventDefault();
+    setTransSubmitting(true); setTransError(''); setTransSuccess('');
+    if (!transForm.recipient_id || !transForm.recipient_admin_type) {
+      setTransError('Please select a recipient.');
+      setTransSubmitting(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/transactions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          amount: parseFloat(transForm.amount),
+          currency: transForm.currency,
+          description: transForm.description.trim(),
+          transaction_date: transForm.transaction_date,
+          recipient_id: parseInt(transForm.recipient_id),
+          recipient_admin_type: transForm.recipient_admin_type,
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed to create transaction'); }
+      setTransSuccess('Transaction created and sent for approval.');
+      setTransForm({ amount: '', currency: 'SGD', description: '', transaction_date: new Date().toISOString().slice(0, 10), recipient_id: '', recipient_admin_type: '' });
+      fetchPendingTransactions();
+      fetchTransactions();
+    } catch (err) {
+      setTransError(err.message);
+    } finally {
+      setTransSubmitting(false);
+    }
+  };
+
+  const handleApproveTransaction = async (txId) => {
+    setTransError(''); setTransSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/transactions/${txId}/approve`, { method: 'PUT', headers });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed to approve'); }
+      setTransSuccess('Transaction approved.');
+      fetchPendingTransactions();
+      fetchTransactions();
+    } catch (err) {
+      setTransError(err.message);
+    }
+  };
+
+  const handleRejectTransaction = async () => {
+    if (!rejectModalTx) return;
+    setTransError(''); setTransSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/transactions/${rejectModalTx.id}/reject`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ rejection_reason: rejectReason.trim() || null }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.detail || 'Failed to reject'); }
+      setTransSuccess('Transaction rejected.');
+      setRejectModalTx(null);
+      setRejectReason('');
+      fetchPendingTransactions();
+      fetchTransactions();
+    } catch (err) {
+      setTransError(err.message);
+    }
   };
 
   const handleCreateTag = async (e) => {
@@ -1727,6 +1901,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         >
           📊 Dashboard
         </button>
+        <button
+          className={`nav-tab ${activeTab === 'transactions' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('transactions'); setTransSubTab('new'); }}
+        >
+          💸 Transactions
+        </button>
       </div>
 
       <div className="admin-content">
@@ -1880,13 +2060,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
         {activeTab === 'manage' && (
           <div className="manage-sub-nav">
             {[
-              { key: 'shipments',     label: '📦 Shipments' },
-              { key: 'locations',     label: '📍 Locations' },
-              { key: 'products',      label: '🥭 Products' },
-              { key: 'promos',        label: '🎟️ Promos' },
-              { key: 'bulk-import',   label: '📋 Bulk Orders' },
-              { key: 'site-messages', label: '📢 Site Messages' },
-              { key: 'ads',           label: '🖼️ Ads' },
+              { key: 'shipments',             label: '📦 Shipments' },
+              { key: 'locations',             label: '📍 Locations' },
+              { key: 'products',              label: '🥭 Products' },
+              { key: 'promos',                label: '🎟️ Promos' },
+              { key: 'bulk-import',           label: '📋 Bulk Orders' },
+              { key: 'site-messages',         label: '📢 Site Messages' },
+              { key: 'ads',                   label: '🖼️ Ads' },
+              { key: 'self-collection-popups', label: '🔔 SelfCollection PopUps' },
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -2065,6 +2246,12 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
           </div>
         )}
 
+        {activeTab === 'manage' && manageSubTab === 'self-collection-popups' && !loading && (
+          <div className="locations-section">
+            <SelfCollectionPopups />
+          </div>
+        )}
+
         {activeTab === 'payments' && !loading && (
           <div className="payments-section">
             <PaymentTracker onOrderClick={async (orderId) => {
@@ -2097,6 +2284,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${deliverySubTab === 'portal' ? ' active' : ''}`}
                 onClick={() => { setDeliverySubTab('portal'); fetchDeliveryBoys(); fetchAssignedOrders(); }}
               >🗂️ Delivery Report</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'csv-import' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('csv-import'); fetchDeliveryTags(); }}
+              >📂 CSV Import</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'bulk-reconcile' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('bulk-reconcile'); fetchDeliveryTags(); }}
+              >🔍 Bulk Reconcile</button>
             </div>
 
             {/* ── Tags tab ── */}
@@ -2520,9 +2715,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <span className={`status-badge status-${o.order_status}`}>{o.order_status}</span>
                           </td>
                           <td>
-                            <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : 'status-pending'}`}>
-                              {o.payment_status}
-                            </span>
+                            {o.delivery_type === 'pickup' && o.payment_status === 'succeeded' ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '2px solid #dc2626', borderRadius: 6, padding: '1px 6px' }}>
+                                <span className="status-badge status-completed" style={{ margin: 0 }}>{o.payment_status}</span>
+                                <span title="Self-collection order with successful payment — verify pickup was completed" style={{ color: '#dc2626', fontWeight: 700, fontSize: 13, cursor: 'help', lineHeight: 1 }}>ⓘ</span>
+                              </span>
+                            ) : (
+                              <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : 'status-pending'}`}>
+                                {o.payment_status}
+                              </span>
+                            )}
                           </td>
                           <td><strong>₹{o.total_price}</strong></td>
                         </tr>
@@ -2612,6 +2814,713 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               </div>
             )}
 
+            {/* ── CSV Import sub-tab ── */}
+            {deliverySubTab === 'csv-import' && (() => {
+              const parseImportCsv = (text) => {
+                const rows = [];
+                let row = [], field = '', inQuote = false, i = 0;
+                while (i < text.length) {
+                  const ch = text[i];
+                  if (inQuote) {
+                    if (ch === '"') {
+                      if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+                      inQuote = false;
+                    } else { field += ch; }
+                  } else {
+                    if (ch === '"') { inQuote = true; }
+                    else if (ch === ',') { row.push(field.trim()); field = ''; }
+                    else if (ch === '\n' || ch === '\r') {
+                      row.push(field.trim()); field = '';
+                      if (ch === '\r' && text[i + 1] === '\n') i++;
+                      if (row.some(Boolean)) rows.push(row);
+                      row = []; i++; continue;
+                    } else { field += ch; }
+                  }
+                  i++;
+                }
+                row.push(field.trim());
+                if (row.some(Boolean)) rows.push(row);
+                return rows;
+              };
+
+              const handleCsvFile = (file) => {
+                if (!file) return;
+                if (!file.name.endsWith('.csv')) { setCsvError('Please upload a .csv file.'); return; }
+                setCsvError(''); setCsvBulkResult(null); setCsvSelected(new Set());
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                  const all = parseImportCsv(e.target.result);
+                  if (all.length < 2) { setCsvError('CSV must have a header row and at least one data row.'); return; }
+                  const hdrs = all[0].map(h => h.toLowerCase().trim());
+                  const parsed = all.slice(1).map((vals, idx) => {
+                    const obj = { _rowIndex: idx };
+                    hdrs.forEach((h, i) => { obj[h] = vals[i] ?? ''; });
+                    return obj;
+                  });
+                  setCsvHeaders(hdrs);
+                  setCsvRows(parsed);
+                  setCsvFileName(file.name);
+                };
+                reader.readAsText(file);
+              };
+
+              const orderIdCol = csvHeaders.find(h => h === 'order_id' || h === 'id');
+              const allRowIds = csvRows.map(r => r[orderIdCol]).filter(Boolean);
+              const selectedIds = [...csvSelected].map(Number).filter(n => !isNaN(n));
+
+              const toggleRow = (id) => {
+                setCsvSelected(prev => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id); else next.add(id);
+                  return next;
+                });
+              };
+
+              const toggleAll = () => {
+                if (csvSelected.size === allRowIds.length) setCsvSelected(new Set());
+                else setCsvSelected(new Set(allRowIds));
+              };
+
+              const applyStatusUpdate = async () => {
+                if (!csvBulkStatus || selectedIds.length === 0) return;
+                setCsvBulkLoading(true); setCsvBulkResult(null);
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: selectedIds, new_status: csvBulkStatus }),
+                  });
+                  const data = await res.json();
+                  setCsvBulkResult({ type: 'status', ok: res.ok, data });
+                  if (res.ok) {
+                    setCsvRows(prev => prev.map(r =>
+                      csvSelected.has(r[orderIdCol]) ? { ...r, order_status: csvBulkStatus } : r
+                    ));
+                  }
+                } catch (err) {
+                  setCsvBulkResult({ type: 'status', ok: false, data: { detail: err.message } });
+                } finally { setCsvBulkLoading(false); }
+              };
+
+              const applyTagUpdate = async () => {
+                if (csvBulkTagId === '' || selectedIds.length === 0) return;
+                setCsvBulkLoading(true); setCsvBulkResult(null);
+                try {
+                  const tag_id = csvBulkTagId === 'clear' ? null : Number(csvBulkTagId);
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: selectedIds, tag_id }),
+                  });
+                  const data = await res.json();
+                  setCsvBulkResult({ type: 'tag', ok: res.ok, data });
+                  if (res.ok) {
+                    const tagName = deliveryTags.find(t => t.id === tag_id)?.name || '—';
+                    setCsvRows(prev => prev.map(r =>
+                      csvSelected.has(r[orderIdCol]) ? { ...r, delivery_tag: tagName } : r
+                    ));
+                  }
+                } catch (err) {
+                  setCsvBulkResult({ type: 'tag', ok: false, data: { detail: err.message } });
+                } finally { setCsvBulkLoading(false); }
+              };
+
+              const downloadTemplate = () => {
+                const content = [
+                  'order_id,order_ref,customer_name,customer_email,order_status,delivery_tag,total_price',
+                  '1001,ORD-001,Jane Doe,jane@example.com,confirmed,Zone A,25.50',
+                ].join('\n');
+                const url = URL.createObjectURL(new Blob([content], { type: 'text/csv' }));
+                const a = document.createElement('a');
+                a.href = url; a.download = 'order-import-template.csv'; a.click();
+                URL.revokeObjectURL(url);
+              };
+
+              const STATUS_COLORS = {
+                pending:   { bg: '#fef3c7', text: '#d97706' },
+                confirmed: { bg: '#dbeafe', text: '#1d4ed8' },
+                shipped:   { bg: '#ede9fe', text: '#7c3aed' },
+                delivered: { bg: '#d1fae5', text: '#065f46' },
+                cancelled: { bg: '#fee2e2', text: '#b91c1c' },
+              };
+
+              return (
+                <div className="delivery-card">
+                  {/* Header */}
+                  <div className="csv-import-header">
+                    <h2>📂 CSV Order Import</h2>
+                    <button className="orders-clear-btn csv-template-btn" onClick={downloadTemplate}>
+                      ⬇ Download Template
+                    </button>
+                  </div>
+                  <p className="csv-import-desc">
+                    Upload a CSV with order data. The file must include an <strong>order_id</strong> column.
+                    Select rows and use the bulk actions to update order status or assign delivery tags.
+                  </p>
+
+                  {/* Drop zone — only show when no file loaded */}
+                  {csvRows.length === 0 && (
+                    <div
+                      className="csv-drop-zone"
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); handleCsvFile(e.dataTransfer.files[0]); }}
+                      onClick={() => document.getElementById('csv-import-file').click()}
+                    >
+                      <div className="csv-drop-icon">📄</div>
+                      <div className="csv-drop-label">Drag &amp; drop a CSV file here, or click to browse</div>
+                      <div className="csv-drop-hint">Supports .csv files only</div>
+                      <input
+                        id="csv-import-file"
+                        type="file"
+                        accept=".csv"
+                        style={{ display: 'none' }}
+                        onChange={e => { handleCsvFile(e.target.files[0]); e.target.value = ''; }}
+                      />
+                    </div>
+                  )}
+
+                  {csvError && <div className="db-error" style={{ marginTop: 12 }}>{csvError}</div>}
+
+                  {/* Loaded state */}
+                  {csvRows.length > 0 && (
+                    <>
+                      {/* File info bar */}
+                      <div className="csv-file-bar">
+                        <span className="csv-file-name">📄 {csvFileName} — {csvRows.length} row{csvRows.length !== 1 ? 's' : ''}</span>
+                        <button
+                          className="orders-clear-btn"
+                          onClick={() => {
+                            setCsvRows([]); setCsvHeaders([]); setCsvFileName('');
+                            setCsvSelected(new Set()); setCsvBulkResult(null);
+                            setCsvBulkStatus(''); setCsvBulkTagId('');
+                          }}
+                        >✕ Clear</button>
+                      </div>
+
+                      {/* Warning when no order_id column */}
+                      {!orderIdCol && (
+                        <div className="db-error" style={{ marginBottom: 12 }}>
+                          ⚠ No <strong>order_id</strong> column found — bulk actions disabled.
+                        </div>
+                      )}
+
+                      {/* Bulk actions toolbar */}
+                      {orderIdCol && (
+                        <div className="csv-bulk-toolbar">
+                          <span className="csv-selected-count">
+                            {selectedIds.length} row{selectedIds.length !== 1 ? 's' : ''} selected
+                          </span>
+
+                          {/* Status action */}
+                          <select
+                            className="orders-filter-select"
+                            value={csvBulkStatus}
+                            onChange={e => setCsvBulkStatus(e.target.value)}
+                          >
+                            <option value="">— Update Status —</option>
+                            <option value="pending">Pending</option>
+                            <option value="confirmed">Confirmed</option>
+                            <option value="shipped">Shipped</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <button
+                            className="submit-button csv-action-btn"
+                            disabled={!csvBulkStatus || selectedIds.length === 0 || csvBulkLoading}
+                            onClick={applyStatusUpdate}
+                          >
+                            {csvBulkLoading ? 'Updating…' : 'Apply Status'}
+                          </button>
+
+                          <div className="csv-toolbar-divider" />
+
+                          {/* Tag action */}
+                          <select
+                            className="orders-filter-select"
+                            value={csvBulkTagId}
+                            onChange={e => setCsvBulkTagId(e.target.value)}
+                          >
+                            <option value="">— Assign Tag —</option>
+                            {deliveryTags.filter(t => t.is_active).map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                            <option value="clear">Clear Tag</option>
+                          </select>
+                          <button
+                            className="submit-button csv-action-btn"
+                            disabled={!csvBulkTagId || selectedIds.length === 0 || csvBulkLoading}
+                            onClick={applyTagUpdate}
+                          >
+                            {csvBulkLoading ? 'Updating…' : 'Apply Tag'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Action result banner */}
+                      {csvBulkResult && (
+                        <div className={`csv-result-banner ${csvBulkResult.ok ? 'csv-result-ok' : 'csv-result-err'}`}>
+                          {csvBulkResult.ok
+                            ? `✅ Updated ${csvBulkResult.data?.count ?? csvBulkResult.data?.updated?.length ?? 0} order(s) successfully.`
+                            : `❌ ${csvBulkResult.data?.detail || 'Something went wrong.'}`}
+                        </div>
+                      )}
+
+                      {/* Data table */}
+                      <div className="csv-table-wrap">
+                        <table className="csv-import-table">
+                          <thead>
+                            <tr>
+                              {orderIdCol && (
+                                <th className="csv-th csv-th-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={allRowIds.length > 0 && csvSelected.size === allRowIds.length}
+                                    onChange={toggleAll}
+                                  />
+                                </th>
+                              )}
+                              {csvHeaders.map(h => (
+                                <th key={h} className="csv-th">{h.replace(/_/g, ' ')}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {csvRows.map((row, idx) => {
+                              const rowId = row[orderIdCol];
+                              const isSelected = csvSelected.has(rowId);
+                              return (
+                                <tr
+                                  key={idx}
+                                  className={`csv-tr${isSelected ? ' csv-tr-selected' : ''}`}
+                                  onClick={() => orderIdCol && toggleRow(rowId)}
+                                >
+                                  {orderIdCol && (
+                                    <td className="csv-td">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleRow(rowId)}
+                                        onClick={e => e.stopPropagation()}
+                                      />
+                                    </td>
+                                  )}
+                                  {csvHeaders.map(h => {
+                                    const val = row[h] ?? '';
+                                    if (h === 'order_status') {
+                                      const c = STATUS_COLORS[val?.toLowerCase()] || { bg: '#f3f4f6', text: '#6b7280' };
+                                      return (
+                                        <td key={h} className="csv-td">
+                                          {val
+                                            ? <span className="csv-status-badge" style={{ background: c.bg, color: c.text }}>{val}</span>
+                                            : '—'}
+                                        </td>
+                                      );
+                                    }
+                                    return <td key={h} className="csv-td">{val || '—'}</td>;
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── Bulk Reconcile sub-tab ── */}
+            {deliverySubTab === 'bulk-reconcile' && (() => {
+              const STATUS_COLORS = {
+                pending:   { bg: '#fef3c7', text: '#d97706' },
+                confirmed: { bg: '#dbeafe', text: '#1d4ed8' },
+                shipped:   { bg: '#ede9fe', text: '#7c3aed' },
+                delivered: { bg: '#d1fae5', text: '#065f46' },
+                cancelled: { bg: '#fee2e2', text: '#b91c1c' },
+              };
+
+              const parseRefsFromCsv = (text) => {
+                const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                if (lines.length === 0) return [];
+                // Skip header row if first column value is not a valid order ref pattern
+                // (i.e. looks like a label like "order_ref", "ref", "reference", "Order Ref", etc.)
+                const firstCell = (line) => {
+                  if (line.startsWith('"')) {
+                    const end = line.indexOf('"', 1);
+                    return end > -1 ? line.slice(1, end) : line.slice(1);
+                  }
+                  return line.split(',')[0];
+                };
+                const headerGuess = firstCell(lines[0]).toLowerCase().replace(/[^a-z0-9]/g, '');
+                const looksLikeHeader = ['orderref', 'ref', 'reference', 'order', 'orderid', 'id'].includes(headerGuess);
+                const dataLines = looksLikeHeader ? lines.slice(1) : lines;
+                return dataLines.map(l => firstCell(l).trim()).filter(Boolean);
+              };
+
+              const handleReconcileFile = (file) => {
+                if (!file) return;
+                if (!file.name.endsWith('.csv')) { setReconcileError('Please upload a .csv file.'); return; }
+                setReconcileError('');
+                setReconcileOrders([]);
+                setReconcileNotFound([]);
+                setReconcileSelected(new Set());
+                setReconcileBulkResult(null);
+                setReconcileLoaded(false);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                  const refs = parseRefsFromCsv(e.target.result);
+                  if (refs.length === 0) { setReconcileError('No order refs found in CSV. Make sure order_ref is the first column.'); return; }
+                  setReconcileRefs(refs);
+                  setReconcileFileName(file.name);
+                };
+                reader.readAsText(file);
+              };
+
+              const loadOrders = async () => {
+                if (reconcileRefs.length === 0) return;
+                setReconcileLoading(true);
+                setReconcileError('');
+                setReconcileBulkResult(null);
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/reconcile`, {
+                    method: 'POST',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_refs: reconcileRefs }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) { setReconcileError(data.detail || 'Failed to load orders.'); return; }
+                  setReconcileOrders(data.found || []);
+                  setReconcileNotFound(data.not_found || []);
+                  setReconcileSelected(new Set());
+                  setReconcileLoaded(true);
+                } catch (err) {
+                  setReconcileError(err.message);
+                } finally {
+                  setReconcileLoading(false);
+                }
+              };
+
+              const toggleReconcileRow = (id) => {
+                setReconcileSelected(prev => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id); else next.add(id);
+                  return next;
+                });
+              };
+
+              const toggleReconcileAll = () => {
+                if (reconcileSelected.size === reconcileOrders.length)
+                  setReconcileSelected(new Set());
+                else
+                  setReconcileSelected(new Set(reconcileOrders.map(o => o.id)));
+              };
+
+              const selectedIds = [...reconcileSelected];
+
+              const applyReconcileStatus = async () => {
+                if (!reconcileBulkStatus || selectedIds.length === 0) return;
+                setReconcileBulkLoading(true); setReconcileBulkResult(null);
+                try {
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-status`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: selectedIds, new_status: reconcileBulkStatus }),
+                  });
+                  const data = await res.json();
+                  setReconcileBulkResult({ type: 'status', ok: res.ok, data });
+                  if (res.ok) {
+                    setReconcileOrders(prev => prev.map(o =>
+                      reconcileSelected.has(o.id) ? { ...o, order_status: reconcileBulkStatus } : o
+                    ));
+                  }
+                } catch (err) {
+                  setReconcileBulkResult({ type: 'status', ok: false, data: { detail: err.message } });
+                } finally { setReconcileBulkLoading(false); }
+              };
+
+              const applyReconcileTag = async () => {
+                if (reconcileBulkTagId === '' || selectedIds.length === 0) return;
+                setReconcileBulkLoading(true); setReconcileBulkResult(null);
+                try {
+                  const tag_id = reconcileBulkTagId === 'clear' ? null : Number(reconcileBulkTagId);
+                  const res = await fetch(`${API_BASE}/api/v1/admin/orders/bulk-tag`, {
+                    method: 'PUT',
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_ids: selectedIds, tag_id }),
+                  });
+                  const data = await res.json();
+                  setReconcileBulkResult({ type: 'tag', ok: res.ok, data });
+                  if (res.ok) {
+                    const tag = deliveryTags.find(t => t.id === tag_id);
+                    setReconcileOrders(prev => prev.map(o =>
+                      reconcileSelected.has(o.id)
+                        ? { ...o, delivery_tag_id: tag_id, delivery_tag_name: tag?.name || null, delivery_tag_color: tag?.color || null }
+                        : o
+                    ));
+                  }
+                } catch (err) {
+                  setReconcileBulkResult({ type: 'tag', ok: false, data: { detail: err.message } });
+                } finally { setReconcileBulkLoading(false); }
+              };
+
+              const clearReconcile = () => {
+                setReconcileRefs([]);
+                setReconcileFileName('');
+                setReconcileOrders([]);
+                setReconcileNotFound([]);
+                setReconcileSelected(new Set());
+                setReconcileBulkResult(null);
+                setReconcileBulkStatus('');
+                setReconcileBulkTagId('');
+                setReconcileLoaded(false);
+                setReconcileError('');
+              };
+
+              return (
+                <div className="delivery-card">
+                  {/* Header */}
+                  <div className="csv-import-header">
+                    <h2>🔍 Bulk Order Reconcile</h2>
+                  </div>
+                  <p className="csv-import-desc">
+                    Upload a CSV file — the <strong>first column</strong> must contain <strong>Order Refs</strong>.
+                    All other columns are ignored. Load orders, then select rows to assign a tag or update delivery status in bulk.
+                  </p>
+
+                  {/* Drop zone — show when no refs loaded */}
+                  {reconcileRefs.length === 0 && (
+                    <div
+                      className="csv-drop-zone"
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); handleReconcileFile(e.dataTransfer.files[0]); }}
+                      onClick={() => document.getElementById('reconcile-file-input').click()}
+                    >
+                      <div className="csv-drop-icon">📄</div>
+                      <div className="csv-drop-label">Drag &amp; drop a CSV file here, or click to browse</div>
+                      <div className="csv-drop-hint">First column = Order Ref &nbsp;·&nbsp; All other columns ignored</div>
+                      <input
+                        id="reconcile-file-input"
+                        type="file"
+                        accept=".csv"
+                        style={{ display: 'none' }}
+                        onChange={e => { handleReconcileFile(e.target.files[0]); e.target.value = ''; }}
+                      />
+                    </div>
+                  )}
+
+                  {reconcileError && <div className="db-error" style={{ marginTop: 12 }}>{reconcileError}</div>}
+
+                  {/* Refs loaded — show file bar + Load button */}
+                  {reconcileRefs.length > 0 && (
+                    <>
+                      <div className="csv-file-bar">
+                        <span className="csv-file-name">
+                          📄 {reconcileFileName} — <strong>{reconcileRefs.length}</strong> ref{reconcileRefs.length !== 1 ? 's' : ''} found
+                        </span>
+                        <button className="orders-clear-btn" onClick={clearReconcile}>✕ Clear</button>
+                      </div>
+
+                      {/* Ref chips preview */}
+                      <div className="reconcile-ref-chips">
+                        {reconcileRefs.slice(0, 30).map((r, i) => (
+                          <span key={i} className="reconcile-ref-chip">{r}</span>
+                        ))}
+                        {reconcileRefs.length > 30 && (
+                          <span className="reconcile-ref-chip reconcile-ref-chip-more">+{reconcileRefs.length - 30} more</span>
+                        )}
+                      </div>
+
+                      {!reconcileLoaded && (
+                        <button
+                          className="submit-button"
+                          style={{ marginTop: 16 }}
+                          onClick={loadOrders}
+                          disabled={reconcileLoading}
+                        >
+                          {reconcileLoading ? 'Loading…' : `🔍 Load ${reconcileRefs.length} Order${reconcileRefs.length !== 1 ? 's' : ''}`}
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Orders loaded */}
+                  {reconcileLoaded && (
+                    <>
+                      {/* Summary strip */}
+                      <div className="reconcile-summary-strip">
+                        <span className="reconcile-summary-item reconcile-ok">
+                          ✅ {reconcileOrders.length} matched
+                        </span>
+                        {reconcileNotFound.length > 0 && (
+                          <span className="reconcile-summary-item reconcile-warn">
+                            ⚠ {reconcileNotFound.length} not found
+                          </span>
+                        )}
+                        <button
+                          className="orders-clear-btn"
+                          style={{ marginLeft: 'auto' }}
+                          onClick={loadOrders}
+                          disabled={reconcileLoading}
+                        >
+                          {reconcileLoading ? 'Refreshing…' : '↻ Refresh'}
+                        </button>
+                      </div>
+
+                      {/* Unmatched refs */}
+                      {reconcileNotFound.length > 0 && (
+                        <div className="reconcile-notfound-box">
+                          <div className="reconcile-notfound-title">⚠ Unrecognised Refs ({reconcileNotFound.length})</div>
+                          <div className="reconcile-ref-chips" style={{ marginTop: 8 }}>
+                            {reconcileNotFound.map((r, i) => (
+                              <span key={i} className="reconcile-ref-chip reconcile-ref-chip-warn">{r}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {reconcileOrders.length > 0 && (
+                        <>
+                          {/* Bulk action toolbar */}
+                          <div className="csv-bulk-toolbar">
+                            <span className="csv-selected-count">
+                              {selectedIds.length} of {reconcileOrders.length} selected
+                            </span>
+
+                            {/* Status action */}
+                            <select
+                              className="orders-filter-select"
+                              value={reconcileBulkStatus}
+                              onChange={e => setReconcileBulkStatus(e.target.value)}
+                            >
+                              <option value="">— Update Status —</option>
+                              <option value="pending">Pending</option>
+                              <option value="confirmed">Confirmed</option>
+                              <option value="shipped">Shipped</option>
+                              <option value="delivered">Delivered</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                            <button
+                              className="submit-button csv-action-btn"
+                              disabled={!reconcileBulkStatus || selectedIds.length === 0 || reconcileBulkLoading}
+                              onClick={applyReconcileStatus}
+                            >
+                              {reconcileBulkLoading ? 'Updating…' : 'Apply Status'}
+                            </button>
+
+                            <div className="csv-toolbar-divider" />
+
+                            {/* Tag action */}
+                            <select
+                              className="orders-filter-select"
+                              value={reconcileBulkTagId}
+                              onChange={e => setReconcileBulkTagId(e.target.value)}
+                            >
+                              <option value="">— Assign Tag —</option>
+                              {deliveryTags.filter(t => t.is_active).map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                              <option value="clear">Clear Tag</option>
+                            </select>
+                            <button
+                              className="submit-button csv-action-btn"
+                              disabled={reconcileBulkTagId === '' || selectedIds.length === 0 || reconcileBulkLoading}
+                              onClick={applyReconcileTag}
+                            >
+                              {reconcileBulkLoading ? 'Updating…' : 'Apply Tag'}
+                            </button>
+                          </div>
+
+                          {/* Result banner */}
+                          {reconcileBulkResult && (
+                            <div className={`csv-result-banner ${reconcileBulkResult.ok ? 'csv-result-ok' : 'csv-result-err'}`}>
+                              {reconcileBulkResult.ok
+                                ? `✅ Updated ${reconcileBulkResult.data?.count ?? reconcileBulkResult.data?.updated?.length ?? 0} order(s) successfully.`
+                                : `❌ ${reconcileBulkResult.data?.detail || 'Something went wrong.'}`}
+                            </div>
+                          )}
+
+                          {/* Matched orders table */}
+                          <div className="csv-table-wrap">
+                            <table className="csv-import-table">
+                              <thead>
+                                <tr>
+                                  <th className="csv-th csv-th-check">
+                                    <input
+                                      type="checkbox"
+                                      checked={reconcileOrders.length > 0 && reconcileSelected.size === reconcileOrders.length}
+                                      onChange={toggleReconcileAll}
+                                    />
+                                  </th>
+                                  <th className="csv-th">Order Ref</th>
+                                  <th className="csv-th">Customer</th>
+                                  <th className="csv-th">Delivery Address</th>
+                                  <th className="csv-th">Status</th>
+                                  <th className="csv-th">Tag</th>
+                                  <th className="csv-th">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {reconcileOrders.map(order => {
+                                  const isSelected = reconcileSelected.has(order.id);
+                                  const sc = STATUS_COLORS[order.order_status] || { bg: '#f3f4f6', text: '#6b7280' };
+                                  return (
+                                    <tr
+                                      key={order.id}
+                                      className={`csv-tr${isSelected ? ' csv-tr-selected' : ''}`}
+                                      onClick={() => toggleReconcileRow(order.id)}
+                                    >
+                                      <td className="csv-td">
+                                        <input
+                                          type="checkbox"
+                                          checked={isSelected}
+                                          onChange={() => toggleReconcileRow(order.id)}
+                                          onClick={e => e.stopPropagation()}
+                                        />
+                                      </td>
+                                      <td className="csv-td" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{order.order_ref}</td>
+                                      <td className="csv-td">
+                                        <div>{order.customer_name}</div>
+                                        {order.customer_phone && (
+                                          <div style={{ fontSize: 11, color: '#6b7280' }}>{order.customer_phone}</div>
+                                        )}
+                                      </td>
+                                      <td className="csv-td" style={{ maxWidth: 200, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                        {order.delivery_type === 'pickup' ? (
+                                          <span style={{ color: '#6b7280', fontStyle: 'italic' }}>Self-collection</span>
+                                        ) : (order.delivery_address || '—')}
+                                      </td>
+                                      <td className="csv-td">
+                                        <span className="csv-status-badge" style={{ background: sc.bg, color: sc.text }}>
+                                          {order.order_status}
+                                        </span>
+                                      </td>
+                                      <td className="csv-td">
+                                        {order.delivery_tag_name
+                                          ? <span
+                                              className="reconcile-tag-badge"
+                                              style={{ background: order.delivery_tag_color || '#6b7280' }}
+                                            >{order.delivery_tag_name}</span>
+                                          : <span style={{ color: '#9ca3af' }}>—</span>
+                                        }
+                                      </td>
+                                      <td className="csv-td" style={{ whiteSpace: 'nowrap' }}>
+                                        {order.total_price != null ? `$${order.total_price.toFixed(2)}` : '—'}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* ── Delivery Sheet sub-tab ── */}
             {deliverySubTab === 'delivery-sheet' && (() => {
               const dsFiltered = reportOrders
@@ -2648,7 +3557,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   : o.delivery_address.trim();
                 const type = o.delivery_type === 'pickup' ? 'Self Collection' : 'Home Delivery';
                 const _block = o.delivery_type === 'delivery' ? (o.delivery_address?.split(',')[0]?.trim() || '') : '';
-                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: extractPostal(addr), _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null, _block, _wt: {} };
+                if (!addressMap[addr]) addressMap[addr] = { _name: o.customer_name || '', _phone: o.customer_phone || '', _type: type, _postal: extractPostal(addr), _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '', _tag_id: o.delivery_tag_id || null, _block, _wt: {}, _orderIds: [] };
+                addressMap[addr]._orderIds.push(o.order_ref);
                 (o.items || []).forEach(it => {
                   const v = stripStd(it.variant);
                   if (v) {
@@ -2741,7 +3651,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 addresses.map(addr => {
                   const row = addressMap[addr];
                   const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
-                  return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', block: row._block || '', ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total, _wt: row._wt || {} };
+                  return { addr, tagId: row._tag_id, tagName: row._tag_name, type: row._type, name: row._name, phone: row._phone, postal: row._postal || '', block: row._block || '', orderIds: row._orderIds || [], ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total, _wt: row._wt || {} };
                 }).filter(r => r.total > 0),
                 deliverySort.col, deliverySort.dir
               );
@@ -3000,7 +3910,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     </td>
                                     <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>${Number(o.total_price || 0).toFixed(2)}</td>
                                     <td><span className={`status-badge status-${o.order_status}`}>{o.order_status}</span></td>
-                                    <td><span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>{o.payment_status}</span></td>
+                                    <td>
+                                      {o.delivery_type === 'pickup' && o.payment_status === 'succeeded' ? (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '2px solid #dc2626', borderRadius: 6, padding: '1px 6px' }}>
+                                          <span className="status-badge status-completed" style={{ margin: 0 }}>{o.payment_status}</span>
+                                          <span title="Self-collection order with successful payment — verify pickup was completed" style={{ color: '#dc2626', fontWeight: 700, fontSize: 13, cursor: 'help', lineHeight: 1 }}>ⓘ</span>
+                                        </span>
+                                      ) : (
+                                        <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>{o.payment_status}</span>
+                                      )}
+                                    </td>
                                     <td style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}>{o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
                                   </tr>
                                 );
@@ -3070,9 +3989,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       )}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
-                          const hdrs = [...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', ...(dsShowBlock ? ['Block / Unit'] : []), ...(dsShowType ? ['Type'] : []), ...(dsShowName ? ['Customer'] : []), ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total', 'Weight (kg)'];
-                          const rows = deliveryRows.map(r => [...(dsShowTag ? [r.tagName || ''] : []), r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim(), r.postal || '', ...(dsShowBlock ? [r.block || ''] : []), ...(dsShowType ? [r.type] : []), ...(dsShowName ? [r.name] : []), ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0), visibleVariants.reduce((s, v) => s + (r._wt[v] || 0), 0).toFixed(2)]);
-                          rows.push([...(dsShowTag ? [''] : []), 'TOTAL', '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0), visibleVariants.reduce((s, v) => s + addresses.reduce((ss, a) => ss + (addressMap[a]._wt?.[v] || 0), 0), 0).toFixed(2)]);
+                          const hdrs = ['#', ...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', ...(dsShowBlock ? ['Block / Unit'] : []), ...(dsShowType ? ['Type'] : []), ...(dsShowName ? ['Customer'] : []), ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total'];
+                          const rows = deliveryRows.map((r, ri) => [ri + 1, ...(dsShowTag ? [r.tagName || ''] : []), r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim(), r.postal || '', ...(dsShowBlock ? [r.block || ''] : []), ...(dsShowType ? [r.type] : []), ...(dsShowName ? [r.name] : []), ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)]);
+                          rows.push(['', ...(dsShowTag ? [''] : []), 'TOTAL', '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
                           downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
@@ -3091,6 +4010,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                   title="Select all"
                                 />
                               </th>
+                              <th style={{ width: 36, textAlign: 'center', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>#</th>
                               {dsShowTag && <SortTh label="Tag" colKey="tagName" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 90 }} />}
                               <SortTh label="Address / Collection Point" colKey="addr" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 200 }} />
                               <SortTh label="Postal" colKey="postal" sort={deliverySort} onSort={toggleDeliverySort} style={{ minWidth: 70 }} />
@@ -3100,11 +4020,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               {dsShowPhone && <SortTh label="Mobile No." colKey="phone" sort={deliverySort} onSort={toggleDeliverySort} />}
                               {visibleVariants.map(v => <SortTh key={v} label={v} colKey={v} sort={deliverySort} onSort={toggleDeliverySort} className="report-col-confirmed" />)}
                               <SortTh label="Total" colKey="total" sort={deliverySort} onSort={toggleDeliverySort} />
-                              <th style={{ whiteSpace: 'nowrap', color: '#1e40af' }}>Weight (kg)</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {deliveryRows.map(r => {
+                            {deliveryRows.map((r, rowIdx) => {
                               const _rc = r.tagId ? tagPaletteColor(r.tagId) : null;
                               const _badBlock = r.block && !/\d/.test(r.block);
                               const rowStyle = _badBlock
@@ -3128,6 +4047,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                     }}
                                   />
                                 </td>
+                                <td style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{rowIdx + 1}</td>
                                 {dsShowTag && (
                                   <td style={{ whiteSpace: 'nowrap' }}>
                                     {r.tagName
@@ -3147,20 +4067,18 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                                 {dsShowPhone && <td style={{ fontSize: 12 }}>{r.phone}</td>}
                                 {visibleVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
                                 <td className="report-row-total">{visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)}</td>
-                                <td className="report-row-total" style={{ color: '#1e40af' }}>{visibleVariants.reduce((s, v) => s + (r._wt[v] || 0), 0).toFixed(2)}</td>
                               </tr>
                               );
                             })}
                           </tbody>
                           <tfoot>
                             <tr className="report-totals-row">
-                              <td colSpan={3 + (dsShowTag ? 1 : 0) + (dsShowBlock ? 1 : 0) + (dsShowType ? 1 : 0) + (dsShowName ? 1 : 0) + (dsShowPhone ? 1 : 0)}><strong>Total</strong></td>
+                              <td colSpan={4 + (dsShowTag ? 1 : 0) + (dsShowBlock ? 1 : 0) + (dsShowType ? 1 : 0) + (dsShowName ? 1 : 0) + (dsShowPhone ? 1 : 0)}><strong>Total</strong></td>
                               {visibleVariants.map(v => {
                                 const colTotal = addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0);
                                 return <td key={v} className="report-count"><strong>{colTotal}</strong></td>;
                               })}
                               <td className="report-row-total"><strong>{addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)}</strong></td>
-                              <td className="report-row-total" style={{ color: '#1e40af' }}><strong>{visibleVariants.reduce((s, v) => s + addresses.reduce((ss, a) => ss + (addressMap[a]._wt?.[v] || 0), 0), 0).toFixed(2)} kg</strong></td>
                             </tr>
                           </tfoot>
                         </table>
@@ -3500,6 +4418,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       {orderColVisibility.items      && <SortTh label="Items" colKey="items_count" sort={allOrdersSort} onSort={toggleAllOrdersSort} />}
                       <SortTh label="Total" colKey="total_price" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
                       <SortTh label="Date" colKey="_date" sort={allOrdersSort} onSort={toggleAllOrdersSort} />
+                      <th style={{ whiteSpace: 'nowrap' }}>Notify</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3523,6 +4442,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
                                 {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
                               </span>
+                              {o.original_delivery_type === 'pickup' && o.delivery_type === 'delivery' && (
+                                <span title="Originally placed as Self-Collection" style={{ display: 'inline-block', marginLeft: 4, fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle', cursor: 'default' }}>🔄 was Pickup</span>
+                              )}
                             </td>
                             <td className="orders-address-cell">
                               {o.delivery_type === 'pickup'
@@ -3535,9 +4457,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                               </span>
                             </td>
                             <td>
-                              <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>
-                                {o.payment_status}
-                              </span>
+                              {o.delivery_type === 'pickup' && o.payment_status === 'succeeded' ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '2px solid #dc2626', borderRadius: 6, padding: '1px 6px' }}>
+                                  <span className="status-badge status-completed" style={{ margin: 0 }}>{o.payment_status}</span>
+                                  <span title="Self-collection order with successful payment — verify pickup was completed" style={{ color: '#dc2626', fontWeight: 700, fontSize: 13, cursor: 'help', lineHeight: 1 }}>ⓘ</span>
+                                </span>
+                              ) : (
+                                <span className={`status-badge ${o.payment_status === 'succeeded' ? 'status-completed' : o.payment_status === 'failed' ? 'status-missing' : 'status-pending'}`}>
+                                  {o.payment_status}
+                                </span>
+                              )}
                             </td>
                             {orderColVisibility.method && (
                               <td style={{ fontSize: 12 }}>
@@ -3595,11 +4524,26 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <td style={{ fontSize: 12 }}>
                               {o.created_at ? new Date(o.created_at).toLocaleString('en-SG', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                             </td>
+                            <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                              {o.delivery_type === 'pickup' && o.customer_phone ? (
+                                <a
+                                  href={(() => { const raw = o.customer_phone.replace(/\D/g, ''); const num = raw.startsWith('65') || raw.startsWith('+') ? raw : `65${raw}`; const items = (o.items || []).map(it => `${it.variant} ×${it.qty}`).join(', '); return `https://wa.me/${num}?text=${encodeURIComponent(`Your order number ${o.order_ref} is ready for collection at ${o.pickup_location_name || 'our pickup location'}${o.pickup_location_address ? `, ${o.pickup_location_address}` : ''}. Items: ${items}. Please collect your mangoes. Thank You, GardenRoots`)}`; })()}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={`WhatsApp ${o.customer_name} — ready for collection`}
+                                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, background: '#25D366', borderRadius: 8, textDecoration: 'none', fontSize: 16 }}
+                                >
+                                  💬
+                                </a>
+                              ) : (
+                                <span style={{ color: '#d1d5db' }}>—</span>
+                              )}
+                            </td>
                           </tr>
 
                           {isExpanded && (
                             <tr className="order-detail-row">
-                              <td colSpan={9 + Object.values(orderColVisibility).filter(Boolean).length}>
+                              <td colSpan={10 + Object.values(orderColVisibility).filter(Boolean).length}>
                                 <div className="order-detail-panel">
                                   <div className="order-detail-grid">
                                     <div className="order-detail-block">
@@ -3747,10 +4691,11 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   </thead>
                   <tbody>
                     {abandonedOrders.map(o => {
-                      const phone = (o.customer_phone || '').replace(/\D/g, '');
+                      const rawPhone = (o.customer_phone || '').replace(/\D/g, '');
+                      const phone = rawPhone.startsWith('65') || rawPhone.startsWith('+') ? rawPhone : `65${rawPhone}`;
                       const itemSummary = o.items.map(i => `${i.variant} ×${i.qty}`).join(', ');
                       const waText = encodeURIComponent(
-                        `Hi ${o.customer_name}! 👋 We noticed you started an order (${o.order_ref}) for $${o.total_price} SGD on Garden Roots but didn't complete the payment. Would you like help completing your order? 🥭`
+                        `Hi ${o.customer_name}! 👋 We noticed you started an order (${o.order_ref}) for $${o.total_price} SGD on Garden Roots but didn't complete the payment. Items: ${itemSummary}. Would you like help completing your order? 🥭 Thank You, GardenRoots`
                       );
                       const minutesAgo = o.created_at
                         ? Math.round((Date.now() - new Date(o.created_at).getTime()) / 60000)
@@ -3765,6 +4710,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                             <span className={`status-badge ${o.delivery_type === 'delivery' ? 'status-in-transit' : 'status-pending'}`}>
                               {o.delivery_type === 'delivery' ? 'Delivery' : 'Pickup'}
                             </span>
+                            {o.original_delivery_type === 'pickup' && o.delivery_type === 'delivery' && (
+                              <span title="Originally placed as Self-Collection" style={{ display: 'inline-block', marginLeft: 4, fontSize: 10, fontWeight: 700, color: '#b45309', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 4, padding: '1px 5px', verticalAlign: 'middle', cursor: 'default' }}>🔄 was Pickup</span>
+                            )}
                           </td>
                           <td style={{ fontSize: 12, maxWidth: 200, whiteSpace: 'normal', lineHeight: 1.5 }}>{itemSummary}</td>
                           <td><strong>${o.total_price} SGD</strong></td>
@@ -3841,7 +4789,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     { label: 'Origin', key: 'origin', placeholder: 'e.g. India' },
                     { label: 'Tag', key: 'tag', placeholder: 'e.g. premium' },
                     { label: 'Emoji', key: 'emoji', placeholder: 'e.g. 🥭' },
-                    { label: 'Size / Variant Name', key: 'size_name', placeholder: 'e.g. 5kg Box' },
                     { label: 'Unit', key: 'unit', placeholder: 'e.g. box' },
                     { label: 'Price (SGD) *', key: 'price', placeholder: 'e.g. 49.90', type: 'number' },
                     { label: 'Initial Stock', key: 'initial_stock', placeholder: 'e.g. 50', type: 'number' },
@@ -4871,6 +5818,266 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             </div>
           );
         })()}
+
+        {/* ════════════════════════════════════════════════════
+            TRANSACTIONS TAB
+        ════════════════════════════════════════════════════ */}
+        {activeTab === 'transactions' && (
+          <div className="trans-section">
+            <div className="sub-tab-bar">
+              {[
+                { key: 'new',     label: '➕ New Transaction' },
+                { key: 'pending', label: `⏳ Pending Approval${pendingTransactions.length ? ` (${pendingTransactions.length})` : ''}` },
+                { key: 'history', label: '📋 History' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  className={`sub-tab ${transSubTab === key ? 'active' : ''}`}
+                  onClick={() => { setTransSubTab(key); setTransError(''); setTransSuccess(''); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {transError && <div className="trans-alert trans-alert-error">⚠️ {transError}</div>}
+            {transSuccess && <div className="trans-alert trans-alert-success">✅ {transSuccess}</div>}
+
+            {/* ── NEW TRANSACTION ── */}
+            {transSubTab === 'new' && (
+              <div className="trans-card">
+                <h2 className="trans-card-title">Record a Transaction</h2>
+                <form className="trans-form" onSubmit={handleCreateTransaction}>
+                  <div className="trans-form-grid">
+                    <div className="form-group">
+                      <label>Recipient *</label>
+                      <select
+                        value={`${transForm.recipient_admin_type}:${transForm.recipient_id}`}
+                        onChange={e => {
+                          const [type, id] = e.target.value.split(':');
+                          setTransForm(f => ({ ...f, recipient_admin_type: type, recipient_id: id }));
+                        }}
+                        required
+                      >
+                        <option value=":">— Select recipient —</option>
+                        {adminUsersCombined.map(u => (
+                          <option key={`${u.admin_type}:${u.id}`} value={`${u.admin_type}:${u.id}`}>
+                            {u.display_name}{u.email ? ` (${u.email})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Transaction Date *</label>
+                      <input
+                        type="date"
+                        value={transForm.transaction_date}
+                        onChange={e => setTransForm(f => ({ ...f, transaction_date: e.target.value }))}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group trans-amount-group">
+                      <label>Amount *</label>
+                      <div className="trans-amount-row">
+                        <select
+                          className="trans-currency-select"
+                          value={transForm.currency}
+                          onChange={e => setTransForm(f => ({ ...f, currency: e.target.value }))}
+                        >
+                          {['SGD', 'USD', 'INR', 'EUR', 'GBP', 'AUD', 'MYR'].map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={transForm.amount}
+                          onChange={e => setTransForm(f => ({ ...f, amount: e.target.value }))}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group trans-desc-group">
+                      <label>Description *</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Describe the purpose of this transaction…"
+                        value={transForm.description}
+                        onChange={e => setTransForm(f => ({ ...f, description: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="trans-form-actions">
+                    <button type="submit" className="trans-btn trans-btn-primary" disabled={transSubmitting}>
+                      {transSubmitting ? 'Sending…' : '📤 Send Transaction'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── PENDING APPROVAL ── */}
+            {transSubTab === 'pending' && (
+              <div className="trans-card">
+                <h2 className="trans-card-title">Transactions Awaiting Your Approval</h2>
+                {pendingTransactions.length === 0 ? (
+                  <p className="trans-empty">No pending transactions for you.</p>
+                ) : (
+                  <div className="trans-table-wrap">
+                    <table className="trans-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>From</th>
+                          <th>Amount</th>
+                          <th>Description</th>
+                          <th>Submitted</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingTransactions.map(tx => (
+                          <tr key={tx.id}>
+                            <td>{tx.transaction_date}</td>
+                            <td><strong>{tx.sender_name}</strong></td>
+                            <td className="trans-amount">{tx.currency} {parseFloat(tx.amount).toFixed(2)}</td>
+                            <td className="trans-desc-cell">{tx.description}</td>
+                            <td className="trans-date-cell">{new Date(tx.created_at).toLocaleDateString()}</td>
+                            <td>
+                              <div className="trans-action-btns">
+                                <button
+                                  className="trans-btn trans-btn-approve"
+                                  onClick={() => handleApproveTransaction(tx.id)}
+                                >
+                                  ✅ Approve
+                                </button>
+                                <button
+                                  className="trans-btn trans-btn-reject"
+                                  onClick={() => { setRejectModalTx(tx); setRejectReason(''); setTransError(''); }}
+                                >
+                                  ❌ Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── HISTORY ── */}
+            {transSubTab === 'history' && (
+              <div className="trans-card">
+                <div className="trans-history-header">
+                  <h2 className="trans-card-title">Transaction History</h2>
+                  <div className="trans-filter-row">
+                    <label>Filter:</label>
+                    {['all', 'pending', 'approved', 'rejected'].map(s => (
+                      <button
+                        key={s}
+                        className={`trans-filter-btn ${transHistoryFilter === s ? 'active' : ''}`}
+                        onClick={() => setTransHistoryFilter(s)}
+                      >
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </button>
+                    ))}
+                    <button className="trans-btn trans-btn-sm" onClick={fetchTransactions} style={{ marginLeft: 'auto' }}>
+                      🔄 Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {transLoading ? (
+                  <p className="trans-empty">Loading…</p>
+                ) : transactions.filter(tx => transHistoryFilter === 'all' || tx.status === transHistoryFilter).length === 0 ? (
+                  <p className="trans-empty">No transactions found.</p>
+                ) : (
+                  <div className="trans-table-wrap">
+                    <table className="trans-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>From</th>
+                          <th>To</th>
+                          <th>Amount</th>
+                          <th>Description</th>
+                          <th>Status</th>
+                          <th>Approved / Rejected</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transactions
+                          .filter(tx => transHistoryFilter === 'all' || tx.status === transHistoryFilter)
+                          .map(tx => (
+                            <tr key={tx.id}>
+                              <td>{tx.transaction_date}</td>
+                              <td>{tx.sender_name}</td>
+                              <td>{tx.recipient_name}</td>
+                              <td className="trans-amount">{tx.currency} {parseFloat(tx.amount).toFixed(2)}</td>
+                              <td className="trans-desc-cell">{tx.description}</td>
+                              <td>
+                                <span className={`trans-status-badge trans-status-${tx.status}`}>
+                                  {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
+                                </span>
+                              </td>
+                              <td className="trans-date-cell">
+                                {tx.status === 'approved' && tx.approved_at
+                                  ? new Date(tx.approved_at).toLocaleDateString()
+                                  : tx.status === 'rejected'
+                                    ? tx.rejection_reason || '—'
+                                    : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── REJECT MODAL ── */}
+            {rejectModalTx && (
+              <div className="trans-modal-overlay" onClick={() => setRejectModalTx(null)}>
+                <div className="trans-modal" onClick={e => e.stopPropagation()}>
+                  <h3>Reject Transaction</h3>
+                  <p>
+                    From <strong>{rejectModalTx.sender_name}</strong> — {rejectModalTx.currency} {parseFloat(rejectModalTx.amount).toFixed(2)}
+                    <br />
+                    <span style={{ color: '#6b7280', fontSize: 13 }}>{rejectModalTx.description}</span>
+                  </p>
+                  <div className="form-group">
+                    <label>Reason (optional)</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Enter reason for rejection…"
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                    />
+                  </div>
+                  <div className="trans-modal-actions">
+                    <button className="trans-btn trans-btn-reject" onClick={handleRejectTransaction}>
+                      Confirm Rejection
+                    </button>
+                    <button className="trans-btn" onClick={() => setRejectModalTx(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>

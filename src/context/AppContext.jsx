@@ -356,7 +356,7 @@ export function AppProvider({ children }) {
           pushBotMsg('', 'pay-options', null);
         }
       } else {
-        setChatMessages(m => [...m, { from: 'bot', text: getBotReply(msg, products) }]);
+        setChatMessages(m => [...m, { from: 'bot', text: getBotReply(msg, products, pickupLocations) }]);
       }
     }, 900 + Math.random() * 400);
   };

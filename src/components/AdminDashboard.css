@@ -1257,17 +1257,20 @@
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
   transition: border-color 0.2s;
+  background: #fff;
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
   border-color: #667eea;
 }
@@ -3411,4 +3414,496 @@
   .bulk-preview-table { font-size: 12px; }
   .bulk-preview-table th,
   .bulk-preview-table td { padding: 5px 7px; }
+}
+
+/* ── CSV Import sub-tab ── */
+.csv-import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.csv-template-btn {
+  white-space: nowrap;
+}
+
+.csv-import-desc {
+  font-size: 13px;
+  color: #6b7280;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.csv-drop-zone {
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  padding: 52px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: #f9fafb;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 4px;
+}
+
+.csv-drop-zone:hover {
+  border-color: #6b7280;
+  background: #f3f4f6;
+}
+
+.csv-drop-icon { font-size: 36px; margin-bottom: 10px; }
+.csv-drop-label { font-weight: 600; font-size: 15px; color: #374151; margin-bottom: 4px; }
+.csv-drop-hint  { font-size: 13px; color: #9ca3af; }
+
+.csv-file-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.csv-file-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #374151;
+}
+
+.csv-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #f3f4f6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+
+.csv-selected-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.csv-action-btn {
+  padding: 7px 16px !important;
+  font-size: 13px !important;
+  white-space: nowrap;
+}
+
+.csv-toolbar-divider {
+  width: 1px;
+  height: 28px;
+  background: #d1d5db;
+  flex-shrink: 0;
+}
+
+.csv-result-banner {
+  margin-bottom: 14px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.csv-result-ok  { background: #d1fae5; color: #065f46; }
+.csv-result-err { background: #fee2e2; color: #b91c1c; }
+
+.csv-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.csv-import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.csv-th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.csv-th-check { width: 44px; }
+
+.csv-tr {
+  border-bottom: 1px solid #f3f4f6;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.csv-tr:hover { background: #f9fafb; }
+.csv-tr-selected { background: #eff6ff !important; }
+
+.csv-td {
+  padding: 10px 14px;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.csv-status-badge {
+  border-radius: 12px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Responsive — Tablet */
+@media (max-width: 900px) {
+  .csv-bulk-toolbar { gap: 8px; padding: 10px 12px; }
+  .csv-drop-zone { padding: 36px 16px; }
+  .csv-import-header { flex-direction: column; align-items: flex-start; }
+}
+
+/* Responsive — Mobile */
+@media (max-width: 480px) {
+  .csv-bulk-toolbar { flex-direction: column; align-items: flex-start; }
+  .csv-toolbar-divider { width: 100%; height: 1px; }
+  .csv-action-btn { width: 100%; text-align: center; }
+  .csv-drop-zone { padding: 28px 12px; }
+  .csv-drop-label { font-size: 14px; }
+  .csv-th, .csv-td { padding: 8px 10px; font-size: 12px; }
+}
+
+/* ============================================================
+   Bulk Reconcile module
+   ============================================================ */
+
+.reconcile-ref-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.reconcile-ref-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.reconcile-ref-chip-more {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.reconcile-ref-chip-warn {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.reconcile-summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin: 14px 0 10px;
+  flex-wrap: wrap;
+}
+
+.reconcile-summary-item {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reconcile-ok   { color: #065f46; }
+.reconcile-warn { color: #92400e; }
+
+.reconcile-notfound-box {
+  padding: 12px 16px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.reconcile-notfound-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.reconcile-tag-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* Responsive — Tablet */
+@media (max-width: 900px) {
+  .reconcile-summary-strip { gap: 10px; }
+}
+
+/* Responsive — Mobile */
+@media (max-width: 480px) {
+  .reconcile-summary-strip { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .reconcile-ref-chip { font-size: 11px; padding: 2px 8px; }
+}
+
+
+/* ============================================================
+   TRANSACTIONS MODULE
+   ============================================================ */
+
+.trans-section {
+  padding: 0;
+}
+
+.trans-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 28px 32px;
+  margin-top: 20px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.trans-card-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 22px 0;
+}
+
+/* Alert banners */
+.trans-alert {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 12px 0 0;
+}
+.trans-alert-error   { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.trans-alert-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+/* ── New Transaction Form ── */
+.trans-form { display: flex; flex-direction: column; gap: 0; }
+
+.trans-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 24px;
+}
+
+.trans-desc-group { grid-column: 1 / -1; }
+
+.trans-amount-row {
+  display: flex;
+  gap: 8px;
+}
+
+.trans-amount-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.trans-currency-select {
+  flex: 0 0 90px;
+  width: 90px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #f9fafb;
+  color: #374151;
+}
+
+.trans-currency-select:focus {
+  outline: none;
+  border-color: #2d5a3d;
+  background: #fff;
+}
+
+.trans-form-actions {
+  margin-top: 22px;
+  display: flex;
+  gap: 12px;
+}
+
+/* ── Buttons ── */
+.trans-btn {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, opacity 0.18s;
+  background: #e5e7eb;
+  color: #374151;
+}
+.trans-btn:hover { background: #d1d5db; }
+.trans-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.trans-btn-primary { background: #2d5a3d; color: #fff; }
+.trans-btn-primary:hover { background: #1e3d29; }
+
+.trans-btn-approve { background: #dcfce7; color: #16a34a; }
+.trans-btn-approve:hover { background: #bbf7d0; }
+
+.trans-btn-reject { background: #fee2e2; color: #dc2626; }
+.trans-btn-reject:hover { background: #fecaca; }
+
+.trans-btn-sm { padding: 6px 14px; font-size: 13px; }
+
+/* ── Pending / History Table ── */
+.trans-table-wrap {
+  overflow-x: auto;
+  margin-top: 4px;
+}
+
+.trans-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.trans-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+  color: #6b7280;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trans-table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+  vertical-align: top;
+}
+
+.trans-table tr:last-child td { border-bottom: none; }
+.trans-table tr:hover td { background: #f9fafb; }
+
+.trans-amount { font-weight: 700; color: #1f2937; white-space: nowrap; }
+.trans-desc-cell { max-width: 260px; word-break: break-word; color: #6b7280; font-size: 13px; }
+.trans-date-cell { white-space: nowrap; font-size: 13px; color: #9ca3af; }
+
+.trans-action-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Status Badges ── */
+.trans-status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.trans-status-pending  { background: #fef9c3; color: #92400e; }
+.trans-status-approved { background: #dcfce7; color: #16a34a; }
+.trans-status-rejected { background: #fee2e2; color: #dc2626; }
+
+/* ── History header row ── */
+.trans-history-header { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.trans-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #6b7280; }
+.trans-filter-btn {
+  padding: 5px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 99px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.15s;
+}
+.trans-filter-btn:hover { border-color: #2d5a3d; color: #2d5a3d; }
+.trans-filter-btn.active { background: #2d5a3d; color: #fff; border-color: #2d5a3d; }
+
+/* ── Empty state ── */
+.trans-empty { color: #9ca3af; font-size: 14px; padding: 20px 0; text-align: center; }
+
+/* ── Reject Modal ── */
+.trans-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.trans-modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+}
+
+.trans-modal h3 { font-size: 18px; font-weight: 700; color: #1f2937; margin: 0 0 12px; }
+.trans-modal p  { font-size: 14px; color: #374151; margin: 0 0 18px; line-height: 1.5; }
+.trans-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+/* ── sub-tab-bar reuse ── */
+.sub-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #e5e7eb;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   TRANSACTIONS — RESPONSIVE
+   ============================================================ */
+
+/* Tablet */
+@media (max-width: 900px) {
+  .trans-form-grid { grid-template-columns: 1fr; }
+  .trans-card { padding: 20px 18px; }
+  .trans-modal { padding: 22px 18px; }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .trans-card { padding: 16px 12px; }
+  .trans-card-title { font-size: 16px; }
+  .trans-table th, .trans-table td { padding: 8px 8px; font-size: 12px; }
+  .trans-amount-row { flex-direction: column; }
+  .trans-currency-select { width: 100%; }
+  .trans-action-btns { flex-direction: column; }
+  .trans-filter-row { gap: 6px; }
+  .trans-btn { padding: 8px 14px; font-size: 13px; }
+  .trans-modal { padding: 18px 14px; max-width: 98vw; }
+  .trans-modal-actions { flex-direction: column; }
+  .trans-history-header { gap: 8px; }
 }

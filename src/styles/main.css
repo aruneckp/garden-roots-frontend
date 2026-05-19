@@ -1202,7 +1202,7 @@ body {
 .order-ref { background:#F0FDF4; border:1px solid #BBF7D0; border-radius:8px; padding:8px 13px; font-size:12px; color:var(--green); font-weight:600; display:inline-block; margin-bottom:16px; }
 
 /* ORDER CONFIRMATION PAGE */
-.confirm-page { max-width: 640px; margin: 0 auto; padding: 60px 24px 120px; text-align: center; min-height: calc(100vh - 80px); display: flex; flex-direction: column; justify-content: center; }
+.confirm-page { max-width: 640px; margin: 0 auto; padding: 60px 24px 120px; text-align: center; }
 .confirm-brand-icon { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
 .confirm-gr-icon { font-size: 56px; line-height: 1; }
 .confirm-gr-text { font-size: 26px; font-weight: 700; color: var(--green); margin-top: 8px; letter-spacing: 0.02em; }
@@ -1210,15 +1210,32 @@ body {
 .confirm-title { font-family: 'Playfair Display', serif; font-size: clamp(26px,4vw,36px); color: var(--dark); margin-bottom: 8px; }
 .confirm-sub { color: #78716C; font-size: 15px; margin-bottom: 32px; }
 
+/* Address cards on confirmation page */
+.confirm-address-card { border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; text-align: left; }
+.confirm-address-delivery { background: #EFF6FF; border: 2px solid #93C5FD; }
+.confirm-address-pickup { background: #F0FDF4; border: 2px solid #86EFAC; }
+
 @media (max-width: 768px) {
-  .confirm-page { padding: 30px 14px 100px; }
+  .confirm-page { padding: 30px 16px 100px; }
   .confirm-gr-icon { font-size: 44px; }
   .confirm-gr-text { font-size: 20px; margin-top: 6px; }
   .confirm-brand-icon { margin-bottom: 14px; }
-  .confirm-title { font-size: clamp(18px,5vw,24px); margin-bottom: 5px; }
-  .confirm-sub { font-size: 12px; margin-bottom: 20px; }
-  .confirm-page > div { padding: 13px 14px !important; margin-bottom: 14px !important; border-radius: 10px !important; }
-  .confirm-page button { padding: 10px 16px !important; font-size: 13px !important; }
+  .confirm-title { font-size: clamp(20px,5vw,28px); margin-bottom: 5px; }
+  .confirm-sub { font-size: 13px; margin-bottom: 20px; }
+  .confirm-page > div { padding: 14px 16px !important; margin-bottom: 14px !important; border-radius: 10px !important; }
+  .confirm-page > div[style*="inline-block"], .confirm-page > div[style*="inline-flex"] { display: block !important; width: 100% !important; box-sizing: border-box !important; min-width: unset !important; }
+  .confirm-address-card { padding: 14px 16px; margin-bottom: 14px; }
+}
+
+@media (max-width: 480px) {
+  .confirm-page { padding: 20px 12px 80px; }
+  .confirm-gr-icon { font-size: 36px; }
+  .confirm-gr-text { font-size: 17px; }
+  .confirm-title { font-size: 20px; margin-bottom: 4px; }
+  .confirm-sub { font-size: 12px; margin-bottom: 16px; }
+  .confirm-page > div { padding: 12px 12px !important; margin-bottom: 12px !important; }
+  .confirm-page > div > div[style*="font-size: 28"], .confirm-page > div > div[style*="fontSize: 28"] { font-size: 20px !important; }
+  .confirm-address-card { padding: 12px; }
 }
 @media (max-width: 768px) { .checkout-page { padding: 16px 16px 60px; } .checkout-layout { grid-template-columns:1fr; } .payment-card { position:static; } .card-row { grid-template-columns:1fr; } }
 

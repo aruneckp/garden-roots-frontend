@@ -1,7 +1,7 @@
 const STATIC_REPLIES = [
   { match: /deliver|shipping|ship|singapore/i, reply: "We deliver island-wide across Singapore! Free delivery on orders over $150. 🚚" },
   { match: /season|when|available|availability/i, reply: "Indian mango season runs Apr–Aug depending on variety:\n\n• Alphonso & Banganapalli: Apr–Jun\n• Mallika, Chandura & Imam Pasand: May–Jun\n• Mallika extends to Jul 🌟\n\nWe're now open for Season 2026!" },
-  { match: /pickup|collect|collection|location|store/i, reply: "We have 6 pickup points across Singapore — Jurong East, Tampines, Orchard, Ang Mo Kio, Bishan, and Woodlands! Click 'Pickup Locations' in the menu to find your nearest one. 📍" },
+  { match: /pickup|collect|collection|location|store/i, reply: null },
   { match: /organic|natural|pesticide|chemical/i, reply: "All our mangoes are naturally grown using traditional orchard practices in India. We work directly with farmers we've known for decades and prioritise quality and purity. 🌱" },
   { match: /contact|phone|call|email|reach/i, reply: "You can reach us at:\n📞 +65 8160 1289\n💬 WhatsApp: wa.me/6581601289\n✉️ info@gardenroots.com.sg\n🕐 Mon–Sat, 9am–6pm SGT\n\nOr click 'Contact Us' in the menu!" },
   { match: /product|aamras|pickle|amchur|dried|powder/i, reply: "Beyond fresh mangoes, we also offer a curated range of mango products — aamras, mango pickles, amchur (mango powder), and dried mango. Ask us for availability! 🛍️" },
@@ -23,7 +23,7 @@ const VARIETY_INFO = [
 
 export const QUICK_REPLIES = ["Order Mangoes", "Varieties & Prices", "My Cart", "Checkout", "Delivery Info"];
 
-export function getBotReply(text, products = []) {
+export function getBotReply(text, products = [], pickupLocations = []) {
   const getPrice = (name) => {
     const p = products.find(p => p.name.toLowerCase() === name.toLowerCase());
     return p?.price ?? null;
@@ -49,9 +49,22 @@ export function getBotReply(text, products = []) {
     }
   }
 
-  // Static replies with no price data
+  // Static replies — pickup reply is built dynamically to include per-location notices
   for (const { match, reply } of STATIC_REPLIES) {
-    if (match.test(text)) return reply;
+    if (!match.test(text)) continue;
+    if (reply !== null) return reply;
+
+    // Dynamic pickup / collection response
+    if (pickupLocations.length === 0) {
+      return "We have self-collection points across Singapore! Head to the Checkout page, choose Self-Pickup, and pick your nearest location. 📍";
+    }
+    const lines = pickupLocations.map(loc => {
+      let line = `📍 ${loc.name} — ${loc.address}`;
+      if (loc.collection_hours) line += `\n   🕐 ${loc.collection_hours}`;
+      if (loc.notification_message) line += `\n   🔔 ${loc.notification_message}`;
+      return line;
+    }).join('\n\n');
+    return `We have ${pickupLocations.length} self-collection point${pickupLocations.length > 1 ? 's' : ''} available:\n\n${lines}\n\nSelect your preferred location at checkout under Self-Pickup. 🏪`;
   }
 
   return "Great question! 🥭 For the most accurate answer, feel free to reach us at info@gardenroots.com.sg or call +65 8160 1289 (Mon–Sat, 9am–6pm SGT). We're happy to help!";

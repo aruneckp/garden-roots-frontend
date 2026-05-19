@@ -349,10 +349,7 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
   // Add a specific variant from the active products list
   const handleAddVariant = (product, variant) => {
     if (!variant?.id) return;
-    const sizeSuffix = product.variants.length > 1 && variant.size_name && variant.size_name !== 'Standard'
-      ? ` (${variant.size_name})`
-      : '';
-    const label = `${product.name}${sizeSuffix}`;
+    const label = product.name;
     setItems(prev => {
       const existing = prev.findIndex(it => it.product_variant_id === variant.id);
       if (existing >= 0) {
@@ -648,9 +645,6 @@ export default function OrderEditModal({ order, headers, activeProducts, pickupL
                               onClick={() => handleAddVariant(p, v)}
                               title={alreadyIn ? 'Already in order — click to add one more' : `Add ${p.name}`}
                             >
-                              {v.size_name && v.size_name !== 'Standard' && (
-                                <span className="oem-variant-size">{v.size_name}</span>
-                              )}
                               <span className="oem-variant-price">${parseFloat(v.price || 0).toFixed(2)}</span>
                               <span className="oem-variant-plus">{alreadyIn ? '＋' : '+'}</span>
                             </button>

@@ -19,7 +19,7 @@ export default function Checkout() {
     confirmedNextDeliveryDate, setConfirmedNextDeliveryDate,
     user, userToken, loginUser, setToast: setAppToast,
     checkoutPickupName, setCheckoutPickupName,
-    pickupLocations,
+    pickupLocations, siteConfig,
   } = useApp();
 
   const [customerForm, setCustomerForm] = useState({
@@ -45,6 +45,7 @@ export default function Checkout() {
 
   // Pickup locations (fetched once in AppContext, shared across all pages)
   const [selectedPickupId, setSelectedPickupId] = useState(null);
+  const [pickupPopup, setPickupPopup] = useState(null);
 
   useEffect(() => {
     if (!checkoutPickupName || pickupLocations.length === 0) return;
@@ -68,6 +69,9 @@ export default function Checkout() {
   const [confirmedItems, setConfirmedItems] = useState([]);
   const [confirmedDisplayTotal, setConfirmedDisplayTotal] = useState(null);
   const [confirmedDeliveryFee, setConfirmedDeliveryFee] = useState(null);
+  const [confirmedDeliveryType, setConfirmedDeliveryType] = useState(null);
+  const [confirmedDeliveryAddressStr, setConfirmedDeliveryAddressStr] = useState(null);
+  const [confirmedPickupForDisplay, setConfirmedPickupForDisplay] = useState(null);
 
   // Payment method — admins can choose Pay Later for phone orders
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('paynow');
@@ -272,6 +276,13 @@ export default function Checkout() {
       // Store order ID + HitPay payment UUID so we can recover the order on return
       sessionStorage.setItem('pending_order_id', order.id);
       sessionStorage.setItem('pending_payment_id', data.payment_intent_id);
+      // Save delivery info so confirmation page can display it after redirect
+      sessionStorage.setItem('confirmed_delivery_type', deliveryType);
+      if (deliveryType === 'delivery') {
+        sessionStorage.setItem('confirmed_delivery_address', deliveryAddress);
+      } else if (deliveryType === 'pickup' && selectedPickup) {
+        sessionStorage.setItem('confirmed_pickup', JSON.stringify(selectedPickup));
+      }
       // Redirect to HitPay hosted checkout
       window.location.href = data.payment_url;
     } catch (err) {
@@ -297,6 +308,28 @@ export default function Checkout() {
       setConfirmedDeliveryFee(displayDelivery);
       setCart([]);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // Restore delivery info — from sessionStorage (HitPay redirect) or current state (pay_later)
+      const storedType = sessionStorage.getItem('confirmed_delivery_type');
+      if (storedType) {
+        setConfirmedDeliveryType(storedType);
+        if (storedType === 'delivery') {
+          setConfirmedDeliveryAddressStr(sessionStorage.getItem('confirmed_delivery_address'));
+        } else if (storedType === 'pickup') {
+          const pStr = sessionStorage.getItem('confirmed_pickup');
+          if (pStr) setConfirmedPickupForDisplay(JSON.parse(pStr));
+        }
+        sessionStorage.removeItem('confirmed_delivery_type');
+        sessionStorage.removeItem('confirmed_delivery_address');
+        sessionStorage.removeItem('confirmed_pickup');
+      } else {
+        setConfirmedDeliveryType(deliveryType);
+        if (deliveryType === 'delivery') {
+          setConfirmedDeliveryAddressStr(deliveryAddress);
+        } else if (deliveryType === 'pickup') {
+          setConfirmedPickupForDisplay(selectedPickup);
+        }
+      }
     }
   }, [payState]);
 
@@ -313,7 +346,7 @@ export default function Checkout() {
           Order Confirmed!
         </h1>
         <p className="confirm-sub">
-          {deliveryType === 'pickup'
+          {confirmedDeliveryType === 'pickup'
             ? 'Your order is confirmed. We\'ll get it ready for pickup soon!'
             : 'Your order is confirmed and will be on its way shortly!'}
         </p>
@@ -371,7 +404,7 @@ export default function Checkout() {
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 14, color: '#374151' }}>
               <span>🚚 Delivery</span>
               <span style={{ fontWeight: 600, color: confirmedDeliveryFee === 0 ? '#16A34A' : '#374151' }}>
-                {confirmedDeliveryFee === 0 ? (deliveryType === 'pickup' ? 'Free (Self-Collection)' : 'Free 🎉') : `$${confirmedDeliveryFee.toFixed(2)}`}
+                {confirmedDeliveryFee === 0 ? (confirmedDeliveryType === 'pickup' ? 'Free (Self-Collection)' : 'Free 🎉') : `$${confirmedDeliveryFee.toFixed(2)}`}
               </span>
             </div>
           )}
@@ -381,24 +414,41 @@ export default function Checkout() {
           </div>
         </div>
 
+        {/* Delivery address — shown for home delivery */}
+        {confirmedDeliveryType === 'delivery' && confirmedDeliveryAddressStr && (
+          <div className="confirm-address-card confirm-address-delivery">
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#1D4ED8', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              🚚 Delivery Address
+            </div>
+            <div style={{ fontSize: 14, color: '#374151', lineHeight: 1.7 }}>
+              {confirmedDeliveryAddressStr}
+            </div>
+          </div>
+        )}
+
         {/* Pickup address — shown only for self-collection */}
-        {deliveryType === 'pickup' && selectedPickup && (
-          <div style={{ background: '#F0FDF4', border: '2px solid #86EFAC', borderRadius: 12, padding: '16px 20px', marginBottom: 24, textAlign: 'left' }}>
+        {confirmedDeliveryType === 'pickup' && confirmedPickupForDisplay && (
+          <div className="confirm-address-card confirm-address-pickup">
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--green)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
               📍 Self-Collection Address
             </div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)', marginBottom: 4 }}>{selectedPickup.name}</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--dark)', marginBottom: 4 }}>{confirmedPickupForDisplay.name}</div>
             <div style={{ fontSize: 13, color: '#374151', lineHeight: 1.7, marginBottom: 6 }}>
-              {selectedPickup.address}
+              {confirmedPickupForDisplay.address}
             </div>
-            {selectedPickup.hours && (
+            {confirmedPickupForDisplay.hours && (
               <div style={{ fontSize: 12, color: 'var(--green-mid)', fontWeight: 500 }}>
-                🕐 {selectedPickup.hours}
+                🕐 {confirmedPickupForDisplay.hours}
               </div>
             )}
-            {selectedPickup.whatsapp_phone && (
+            {confirmedPickupForDisplay.notification_message && (
+              <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 12, color: '#92400e' }}>
+                🔔 {confirmedPickupForDisplay.notification_message}
+              </div>
+            )}
+            {confirmedPickupForDisplay.whatsapp_phone && (
               <a
-                href={`https://wa.me/${selectedPickup.whatsapp_phone.replace(/\D/g, '')}?text=Hi! I'd like to arrange pickup for order ${orderRef}`}
+                href={`https://wa.me/${confirmedPickupForDisplay.whatsapp_phone.replace(/\D/g, '')}?text=Hi! I'd like to arrange pickup for order ${orderRef}`}
                 target="_blank"
                 rel="noreferrer"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, fontWeight: 600, color: '#16A34A', textDecoration: 'none' }}
@@ -425,7 +475,7 @@ export default function Checkout() {
                   💬 WhatsApp +65 8160 1289
                 </a>
               </>
-            : deliveryType === 'pickup'
+            : confirmedDeliveryType === 'pickup'
               ? 'We\'ll prepare your order and notify you when it\'s ready for collection. WhatsApp us to confirm your pickup slot.'
               : 'We\'ll process and dispatch your order. You\'ll receive it fresh at your delivery address.'}
         </div>
@@ -446,6 +496,13 @@ export default function Checkout() {
   }
 
   return (
+    <>
+    {/* Fixed centered overlay shown while order/payment is processing */}
+    {payState === 'processing' && (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <MangoLoader text={selectedPaymentMethod === 'pay_later' ? 'Confirming your order…' : 'Processing your payment…'} />
+      </div>
+    )}
     <div className="checkout-page">
       <h1>Secure Checkout</h1>
       <p className="checkout-page-sub">Complete your order below</p>
@@ -561,9 +618,7 @@ export default function Checkout() {
 
           {payState === 'processing' ? (
             <div className="payment-body">
-              <div className="payment-processing">
-                <MangoLoader text={selectedPaymentMethod === 'pay_later' ? 'Confirming your order…' : 'Processing your payment…'} />
-              </div>
+              <div className="payment-processing" style={{ minHeight: 80 }} />
             </div>
           ) : payState === 'failed' ? (
             <div className="payment-body">
@@ -740,7 +795,12 @@ export default function Checkout() {
                             key={loc.id}
                             type="button"
                             className={`pickup-location-btn${selectedPickupId === loc.id ? ' active' : ''}`}
-                            onClick={() => setSelectedPickupId(loc.id)}
+                            onClick={() => {
+                              setSelectedPickupId(loc.id);
+                              const hasCommon = !!(siteConfig?.self_collection_common_message?.trim());
+                              const hasLocation = !!(loc.notification_message?.trim());
+                              if (hasCommon || hasLocation) setPickupPopup(loc);
+                            }}
                           >
                             📍 {loc.name}
                           </button>
@@ -750,20 +810,27 @@ export default function Checkout() {
 
                     {/* Show selected location details + WhatsApp */}
                     {selectedPickup && (
-                      <div style={{ margin: '4px 0 12px', padding: '12px 14px', background: 'var(--cream)', borderRadius: 8, fontSize: 13, lineHeight: 1.6 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 2 }}>{selectedPickup.name}</div>
-                        <div style={{ color: 'var(--text)' }}>📍 {selectedPickup.address}</div>
-                        {selectedPickup.whatsapp_phone && (
-                          <a
-                            href={`https://wa.me/${selectedPickup.whatsapp_phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#25D366', fontWeight: 600, textDecoration: 'none' }}
-                          >
-                            💬 WhatsApp: {selectedPickup.whatsapp_phone}
-                          </a>
+                      <>
+                        <div style={{ margin: '4px 0 8px', padding: '12px 14px', background: 'var(--cream)', borderRadius: 8, fontSize: 13, lineHeight: 1.6 }}>
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>{selectedPickup.name}</div>
+                          <div style={{ color: 'var(--text)' }}>📍 {selectedPickup.address}</div>
+                          {selectedPickup.whatsapp_phone && (
+                            <a
+                              href={`https://wa.me/${selectedPickup.whatsapp_phone.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#25D366', fontWeight: 600, textDecoration: 'none' }}
+                            >
+                              💬 WhatsApp: {selectedPickup.whatsapp_phone}
+                            </a>
+                          )}
+                        </div>
+                        {selectedPickup.notification_message && (
+                          <div style={{ margin: '0 0 12px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, fontSize: 13, color: '#92400e', lineHeight: 1.5 }}>
+                            🔔 <strong>Notice:</strong> {selectedPickup.notification_message}
+                          </div>
                         )}
-                      </div>
+                      </>
                     )}
                   </>
                 )}
@@ -878,5 +945,46 @@ export default function Checkout() {
         </div>
       </div>
     </div>
+
+    {/* Self-collection popup — location message takes priority; common message is fallback */}
+    {pickupPopup && (() => {
+      const commonMsg = siteConfig?.self_collection_common_message?.trim() || '';
+      const locationMsg = pickupPopup.notification_message?.trim() || '';
+      const msgToShow = locationMsg || commonMsg;
+      if (!msgToShow) return null;
+      const isLocationSpecific = !!locationMsg;
+      return (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setPickupPopup(null)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 18, padding: '28px 24px 24px', maxWidth: 440, width: '100%', boxShadow: '0 24px 64px rgba(0,0,0,0.3)', textAlign: 'center' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 36, marginBottom: 10 }}>📍</div>
+            <div style={{ fontWeight: 700, fontSize: 17, color: 'var(--dark)', marginBottom: 2 }}>{pickupPopup.name}</div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 18 }}>Self-Collection Notice</div>
+
+            <div style={{
+              background: isLocationSpecific ? '#fffbeb' : '#f0fdf4',
+              border: `1px solid ${isLocationSpecific ? '#fcd34d' : '#86efac'}`,
+              borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 13,
+              color: isLocationSpecific ? '#92400e' : '#15803d', lineHeight: 1.65, textAlign: 'left',
+            }}>
+              {isLocationSpecific ? '🔔' : '📢'} {msgToShow}
+            </div>
+
+            <button
+              onClick={() => setPickupPopup(null)}
+              style={{ width: '100%', background: 'var(--green)', color: '#fff', border: 'none', borderRadius: 10, padding: '13px 0', fontWeight: 700, fontSize: 15, cursor: 'pointer', letterSpacing: '0.01em' }}
+            >
+              Got it, continue
+            </button>
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }

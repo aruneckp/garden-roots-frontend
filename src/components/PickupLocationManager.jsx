@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   capacity: 100,
   collection_hours: '',
   notes: '',
+  notification_message: '',
 };
 
 export default function PickupLocationManager() {
@@ -94,6 +95,7 @@ export default function PickupLocationManager() {
       capacity: location.capacity || 100,
       collection_hours: location.collection_hours || '',
       notes: location.notes || '',
+      notification_message: location.notification_message || '',
     });
     setShowForm(true);
     setError('');
@@ -244,6 +246,18 @@ export default function PickupLocationManager() {
             <textarea id="notes" name="notes" value={formData.notes} onChange={handleInputChange} placeholder="Any special notes about this location" rows="3" />
           </div>
 
+          <div className="form-group">
+            <label htmlFor="notification_message">
+              Customer Notification <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: 12 }}>(shown when customer selects this location)</span>
+            </label>
+            <textarea
+              id="notification_message" name="notification_message"
+              value={formData.notification_message} onChange={handleInputChange}
+              placeholder="e.g. Please call ahead before visiting. This location is temporarily closed on Sundays."
+              rows="2"
+            />
+          </div>
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" className="submit-button" disabled={loading}>
               {editingId ? '💾 Save Changes' : '✅ Create Location'}
@@ -303,6 +317,11 @@ export default function PickupLocationManager() {
                       </div>
 
                       {location.notes && <p><strong>📝 Notes:</strong> {location.notes}</p>}
+                      {location.notification_message && (
+                        <div style={{ marginTop: 8, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 13, color: '#92400e' }}>
+                          <strong>🔔 Customer Notification:</strong> {location.notification_message}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
