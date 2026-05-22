@@ -3560,9 +3560,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
               const cleanAddr = addr => addr.replace(/,?\s*singapore\s*$/i, '').trim();
 
-              // Filter: confirmed status + home delivery only
+              // Filter: confirmed status + has delivery address (includes self-collection converted to delivery)
               const llmOrders = reportOrders.filter(o =>
-                o.delivery_type === 'delivery' &&
                 o.order_status === 'confirmed' &&
                 o.delivery_address &&
                 (llmShipmentFilter === 'all' || o.shipment_id === llmShipmentFilter)
