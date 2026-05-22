@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './AdminDashboard.css';
 import PickupLocationManager from './PickupLocationManager';
 import PaymentTracker from './PaymentTracker';
@@ -574,6 +574,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [reconcileBulkResult, setReconcileBulkResult] = useState(null);
   const [reconcileLoaded, setReconcileLoaded] = useState(false);
 
+
+
   // Delivery tags state
   const [deliveryTags, setDeliveryTags] = useState([]);
   const [tagForm, setTagForm] = useState({ name: '', color: '#6b7280', is_active: 1 });
@@ -628,6 +630,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [phoneSearch, setPhoneSearch] = useState('');
   const [phoneFilter, setPhoneFilter] = useState('');
   const [phoneSuggestions, setPhoneSuggestions] = useState([]);
+  const phoneSearchRef = useRef(null);
   const [orderColVisibility, setOrderColVisibility] = useState({ phone: false, method: false, tag: false, assignedTo: false, delCode: false, shipment: false, itemNames: false, items: false });
   const [summarySort, setSummarySort] = useState({ col: null, dir: 'asc' });
   const [deliverySort, setDeliverySort] = useState({ col: null, dir: 'asc' });
@@ -648,6 +651,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsShowType, setDsShowType] = useState(false);
   const [dsShowOrderRefs, setDsShowOrderRefs] = useState(false);
   const [dsSelectedItems, setDsSelectedItems] = useState(null); // null = all selected
+
+  // LalaMove sub-tab state
+  const [llmSort, setLlmSort] = useState({ col: null, dir: 'asc' });
+  const [llmShipmentFilter, setLlmShipmentFilter] = useState('all');
+  const [llmSelectedAddrs, setLlmSelectedAddrs] = useState(new Set());
+  const [llmPreviewMode, setLlmPreviewMode] = useState(false);
+  const [llmItemLabels, setLlmItemLabels] = useState({}); // { variantName: shortLabel } — temp, no DB
+  const [llmFromLocationId, setLlmFromLocationId] = useState(null);
+
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
   const [allOrdersSort, setAllOrdersSort] = useState({ col: null, dir: 'asc' });
@@ -772,10 +784,23 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   useEffect(() => {
     if (activeTab !== 'delivery') return;
     if (deliverySubTab === 'delivery-sheet') { fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }
+    if (deliverySubTab === 'lalamove') { fetchReportOrders(); fetchShipments(); }
     if (deliverySubTab === 'boys') { fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }
     if (deliverySubTab === 'tags') fetchDeliveryTags();
     if (deliverySubTab === 'csv-import') fetchDeliveryTags();
+
   }, [deliverySubTab]);
+
+  // Close phone suggestions on outside click
+  useEffect(() => {
+    const handler = e => {
+      if (phoneSearchRef.current && !phoneSearchRef.current.contains(e.target)) {
+        setPhoneSuggestions([]);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Transactions tab bootstrap
   useEffect(() => {
@@ -2296,6 +2321,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                 className={`manage-sub-tab${deliverySubTab === 'bulk-reconcile' ? ' active' : ''}`}
                 onClick={() => { setDeliverySubTab('bulk-reconcile'); fetchDeliveryTags(); }}
               >🔍 Bulk Reconcile</button>
+              <button
+                className={`manage-sub-tab${deliverySubTab === 'lalamove' ? ' active' : ''}`}
+                onClick={() => { setDeliverySubTab('lalamove'); fetchReportOrders(); fetchShipments(); }}
+              >🚚 LalaMove</button>
             </div>
 
             {/* ── Tags tab ── */}
@@ -3525,6 +3554,317 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               );
             })()}
 
+            {/* ── LalaMove sub-tab ── */}
+            {deliverySubTab === 'lalamove' && (() => {
+              const extractPostal = addr => { const m = addr && addr.match(/\b(\d{5,6})\s*$/); return m ? m[1] : ''; };
+              const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
+              const cleanAddr = addr => addr.replace(/,?\s*singapore\s*$/i, '').trim();
+
+              // Filter: confirmed status + home delivery only
+              const llmOrders = reportOrders.filter(o =>
+                o.delivery_type === 'delivery' &&
+                o.order_status === 'confirmed' &&
+                o.delivery_address &&
+                (llmShipmentFilter === 'all' || o.shipment_id === llmShipmentFilter)
+              );
+
+              const allVariants = [];
+              llmOrders.forEach(o => {
+                (o.items || []).forEach(it => {
+                  const v = stripStd(it.variant);
+                  if (v && !allVariants.includes(v)) allVariants.push(v);
+                });
+              });
+              allVariants.sort();
+
+              // Helper: label or full name for a variant
+              const vLabel = v => (llmItemLabels[v] && llmItemLabels[v].trim()) ? llmItemLabels[v].trim() : v;
+
+              const addressMap = {};
+              llmOrders.forEach(o => {
+                const addr = o.delivery_address.trim();
+                const block = addr.split(',')[0]?.trim() || '';
+                if (!addressMap[addr]) addressMap[addr] = {
+                  _name: o.customer_name || '', _phone: o.customer_phone || '',
+                  _postal: extractPostal(addr), _block: block, _orderIds: [], _wt: {},
+                  _tag_id: o.delivery_tag_id || null, _tag_name: o.delivery_tag_name || '', _tag_color: o.delivery_tag_color || '',
+                };
+                addressMap[addr]._orderIds.push(o.order_ref);
+                (o.items || []).forEach(it => {
+                  const v = stripStd(it.variant);
+                  if (v) {
+                    addressMap[addr][v] = (addressMap[addr][v] || 0) + (it.qty || 0);
+                    if (it.box_weight != null) addressMap[addr]._wt[v] = (addressMap[addr]._wt[v] || 0) + (it.qty || 0) * it.box_weight;
+                  }
+                });
+              });
+
+              const toggleLlmSort = col => setLlmSort(p => ({ col, dir: p.col === col && p.dir === 'asc' ? 'desc' : 'asc' }));
+
+              const llmRows = sortByCol(
+                Object.keys(addressMap).map(addr => {
+                  const row = addressMap[addr];
+                  const total = allVariants.reduce((s, v) => s + (row[v] || 0), 0);
+                  return { addr, name: row._name, phone: row._phone, postal: row._postal, block: row._block, orderIds: row._orderIds, tagId: row._tag_id, tagName: row._tag_name, tagColor: row._tag_color, ...Object.fromEntries(allVariants.map(v => [v, row[v] || 0])), total, _wt: row._wt };
+                }).filter(r => r.total > 0),
+                llmSort.col, llmSort.dir
+              );
+
+              const shipmentsWithOrders = shipments.filter(s => reportOrders.some(o => o.shipment_id === s.id));
+              const llmLabel = llmShipmentFilter === 'all' ? 'all-shipments' : `shipment-${llmShipmentFilter}`;
+
+              // Build name+items string for preview & CSV
+              const buildNameCell = r => {
+                const itemParts = allVariants.filter(v => r[v] > 0).map(v => `${vLabel(v)}(${r[v]})`).join(' ');
+                return itemParts ? `${r.name} - ${itemParts}` : r.name;
+              };
+
+              return (
+                <div className="dashboard-section">
+                  {/* Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <h2 style={{ margin: 0 }}>🚚 LalaMove — Confirmed Home Delivery Orders</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#15803d', background: '#dcfce7', border: '1px solid #86efac', borderRadius: 8, padding: '4px 12px' }}>
+                        {llmRows.length} address{llmRows.length !== 1 ? 'es' : ''} · {llmOrders.length} order{llmOrders.length !== 1 ? 's' : ''}
+                      </span>
+                      <button
+                        onClick={() => setLlmPreviewMode(p => !p)}
+                        style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid #6366f1', background: llmPreviewMode ? '#6366f1' : '#fff', color: llmPreviewMode ? '#fff' : '#6366f1', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}
+                      >{llmPreviewMode ? '🗂️ Table View' : '📋 Preview (Lalamove)'}</button>
+                    </div>
+                  </div>
+
+                  {/* Shipment filter */}
+                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 70 }}>Shipment:</span>
+                    <button className={`report-shipment-btn${llmShipmentFilter === 'all' ? ' active' : ''}`} onClick={() => setLlmShipmentFilter('all')}>All</button>
+                    {shipmentsWithOrders.map(s => (
+                      <button key={s.id} className={`report-shipment-btn${llmShipmentFilter === s.id ? ' active' : ''}`} onClick={() => setLlmShipmentFilter(s.id)}>{s.shipment_ref}</button>
+                    ))}
+                  </div>
+
+                  {/* From address picker */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 70 }}>From:</span>
+                      {adminPickupLocations.filter(l => l.is_active !== 0).map(loc => (
+                        <button
+                          key={loc.id}
+                          className={`report-shipment-btn${llmFromLocationId === loc.id ? ' active' : ''}`}
+                          onClick={() => setLlmFromLocationId(prev => prev === loc.id ? null : loc.id)}
+                        >{loc.name}</button>
+                      ))}
+                      {llmFromLocationId && (
+                        <button onClick={() => setLlmFromLocationId(null)} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', cursor: 'pointer' }}>✕ Clear</button>
+                      )}
+                    </div>
+                    {llmFromLocationId && (() => {
+                      const loc = adminPickupLocations.find(l => l.id === llmFromLocationId);
+                      return loc ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, fontSize: 12, color: '#1e40af' }}>
+                          <span style={{ fontWeight: 700 }}>📍 {loc.name}</span>
+                          <span style={{ color: '#3b82f6' }}>{loc.address}</span>
+                          {loc.phone && <span style={{ color: '#6b7280' }}>{loc.phone}</span>}
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+
+                  {/* Temp item labels */}
+                  {allVariants.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>⚡ Temp Labels:</span>
+                      {allVariants.map(v => {
+                        const colTotal = llmRows.reduce((s, r) => s + (r[v] || 0), 0);
+                        return (
+                          <div key={v} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: '#78350f', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v}>{v}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#b45309' }}>({colTotal})</span>
+                            <span style={{ fontSize: 11, color: '#9ca3af' }}>→</span>
+                            <input
+                              type="text"
+                              value={llmItemLabels[v] || ''}
+                              placeholder="e.g. W"
+                              onChange={e => setLlmItemLabels(prev => ({ ...prev, [v]: e.target.value }))}
+                              style={{ width: 48, padding: '2px 6px', fontSize: 12, fontWeight: 700, border: '1px solid #fcd34d', borderRadius: 4, background: '#fff', color: '#92400e', textAlign: 'center' }}
+                            />
+                          </div>
+                        );
+                      })}
+                      {Object.values(llmItemLabels).some(l => l) && (
+                        <button onClick={() => setLlmItemLabels({})} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #fcd34d', background: '#fff', color: '#b45309', cursor: 'pointer', marginLeft: 4 }}>✕ Clear</button>
+                      )}
+                    </div>
+                  )}
+
+                  {llmRows.length === 0 ? (
+                    <p style={{ color: '#9ca3af', marginTop: 16 }}>No confirmed home delivery orders found.</p>
+                  ) : (
+                    <>
+                      {/* Boxes / items / weight summary — only shown when rows are selected */}
+                      {!llmPreviewMode && llmSelectedAddrs.size > 0 && (() => {
+                        const activeRows = llmRows.filter(r => llmSelectedAddrs.has(r.addr));
+                        const totalBoxes = allVariants.reduce((s, v) => s + activeRows.reduce((ss, r) => ss + (r[v] || 0), 0), 0);
+                        const totalWeight = allVariants.reduce((s, v) => s + activeRows.reduce((ss, r) => ss + (r._wt[v] || 0), 0), 0);
+                        return (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', padding: '8px 12px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, marginBottom: 10 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>
+                              Boxes for selected rows ({llmSelectedAddrs.size}):
+                            </span>
+                            {allVariants.map(v => {
+                              const count = activeRows.reduce((s, r) => s + (r[v] || 0), 0);
+                              return count > 0 ? (
+                                <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 12, background: '#dcfce7', border: '1px solid #86efac', fontSize: 12, fontWeight: 600, color: '#15803d', whiteSpace: 'nowrap' }}>
+                                  {vLabel(v)}: <strong style={{ color: '#166534' }}>{count}</strong>
+                                </span>
+                              ) : null;
+                            })}
+                            <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#166534', whiteSpace: 'nowrap' }}>
+                              Total: {totalBoxes}
+                            </span>
+                            {totalWeight > 0 && (
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#1e40af', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                                Weight: {totalWeight.toFixed(2)} kg
+                              </span>
+                            )}
+                            <button className="cancel-button" onClick={() => setLlmSelectedAddrs(new Set())} style={{ fontSize: 11, marginLeft: 8 }}>✕ Clear</button>
+                          </div>
+                        );
+                      })()}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                        <button className="report-download-btn" onClick={() => {
+                          const hdrs = ['1. Address', '2. Name', '3. Phone', '4. Block/floor'];
+                          const templateDescRow = [
+                            'the number and street name\nOR name of the building\n\ne.g. 21 High Street',
+                            'the name of the recipient\non this particular stop\n\ne.g. John Doe',
+                            'the phone number (with or without phone code)\nof the recipient on this particular stop\n\ne.g. 65878778 or 85265878778 or +85265878778',
+                            'enter the block, floor, room or any additional information\nabout the address on this particular stop\n\ne.g. 13th floor, room 21',
+                          ];
+                          const sourceRows = llmSelectedAddrs.size > 0 ? llmRows.filter(r => llmSelectedAddrs.has(r.addr)) : llmRows;
+                          const rows = [templateDescRow];
+                          const fromLoc = llmFromLocationId ? adminPickupLocations.find(l => l.id === llmFromLocationId) : null;
+                          if (fromLoc) rows.push([fromLoc.address, fromLoc.name, fromLoc.phone || '', fromLoc.address.split(',')[0]?.trim() || '']);
+                          sourceRows.forEach(r => rows.push([cleanAddr(r.addr), buildNameCell(r), r.phone, r.block || '']));
+                          const distinctTags = [...new Set(sourceRows.map(r => r.tagName).filter(Boolean))];
+                          if (distinctTags.length > 0) {
+                            rows.push(['', '', '', '']);
+                            rows.push(['Tags:', distinctTags.join(', '), '', '']);
+                          }
+                          downloadCSV(`lalamove-${llmLabel}.csv`, hdrs, rows);
+                        }}>⬇ Download CSV</button>
+                      </div>
+
+                      {/* ── Preview mode: Lalamove format ── */}
+                      {llmPreviewMode ? (
+                        <div className="report-table-wrap">
+                          <table className="report-location-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: 36, textAlign: 'center', color: '#6b7280', fontSize: 12 }}>#</th>
+                                <th style={{ minWidth: 180, fontSize: 12, fontWeight: 700 }}>1. Address</th>
+                                <th style={{ minWidth: 220, fontSize: 12, fontWeight: 700 }}>2. Name</th>
+                                <th style={{ minWidth: 110, fontSize: 12, fontWeight: 700 }}>3. Phone</th>
+                                <th style={{ minWidth: 120, fontSize: 12, fontWeight: 700 }}>4. Block/floor</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {llmRows.map((r, rowIdx) => (
+                                <tr key={r.addr} style={{ background: rowIdx % 2 === 0 ? '#fafafa' : '#fff' }}>
+                                  <td style={{ textAlign: 'center', fontSize: 12, color: '#6b7280' }}>{rowIdx + 1}</td>
+                                  <td style={{ fontSize: 12 }}>{cleanAddr(r.addr)}</td>
+                                  <td style={{ fontSize: 12, fontWeight: 500 }}>{buildNameCell(r)}</td>
+                                  <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{r.phone}</td>
+                                  <td style={{ fontSize: 12 }}>{r.block || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        /* ── Table view ── */
+                        <div className="report-table-wrap">
+                          <table className="report-location-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: 36, textAlign: 'center', padding: '4px 6px' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={llmRows.length > 0 && llmRows.every(r => llmSelectedAddrs.has(r.addr))}
+                                    onChange={e => {
+                                      if (e.target.checked) setLlmSelectedAddrs(new Set(llmRows.map(r => r.addr)));
+                                      else setLlmSelectedAddrs(new Set());
+                                    }}
+                                    title="Select all"
+                                  />
+                                </th>
+                                <th style={{ width: 36, textAlign: 'center', color: '#6b7280', fontSize: 12, fontWeight: 600 }}>#</th>
+                                <th style={{ minWidth: 90, fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Tag</th>
+                                <SortTh label="Address" colKey="addr" sort={llmSort} onSort={toggleLlmSort} style={{ minWidth: 200 }} />
+                                <SortTh label="Postal" colKey="postal" sort={llmSort} onSort={toggleLlmSort} style={{ minWidth: 70 }} />
+                                <SortTh label="Block / Unit" colKey="block" sort={llmSort} onSort={toggleLlmSort} style={{ minWidth: 100 }} />
+                                <SortTh label="Customer" colKey="name" sort={llmSort} onSort={toggleLlmSort} />
+                                <SortTh label="Mobile No." colKey="phone" sort={llmSort} onSort={toggleLlmSort} />
+                                {allVariants.map(v => (
+                                  <SortTh key={v} label={llmItemLabels[v]?.trim() ? `${llmItemLabels[v].trim()} (${v})` : v} colKey={v} sort={llmSort} onSort={toggleLlmSort} className="report-col-confirmed" />
+                                ))}
+                                <SortTh label="Total" colKey="total" sort={llmSort} onSort={toggleLlmSort} />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {llmRows.map((r, rowIdx) => {
+                                const _rc = r.tagColor || null;
+                                return (
+                                  <tr key={r.addr} style={_rc ? { background: _rc + '18', borderLeft: `3px solid ${_rc}88` } : { background: r.total > 5 ? '#fef9c3' : undefined, borderLeft: r.total > 5 ? '3px solid #eab308' : undefined }}>
+                                    <td style={{ textAlign: 'center', padding: '4px 6px' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={llmSelectedAddrs.has(r.addr)}
+                                        onChange={e => {
+                                          setLlmSelectedAddrs(prev => {
+                                            const next = new Set(prev);
+                                            if (e.target.checked) next.add(r.addr); else next.delete(r.addr);
+                                            return next;
+                                          });
+                                        }}
+                                      />
+                                    </td>
+                                    <td style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{rowIdx + 1}</td>
+                                    <td style={{ whiteSpace: 'nowrap' }}>
+                                      {r.tagName
+                                        ? <span className="delivery-tag-badge" style={{ background: (_rc || '#6b7280') + '22', color: _rc || '#6b7280', border: `1px solid ${(_rc || '#6b7280')}55`, fontSize: 11, padding: '2px 7px', borderRadius: 10, fontWeight: 600 }}>🏷️ {r.tagName}</span>
+                                        : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>}
+                                    </td>
+                                    <td className="report-loc-name" style={{ fontSize: 12 }}>{cleanAddr(r.addr)}</td>
+                                    <td style={{ fontSize: 12, fontWeight: 600, color: r.postal ? '#374151' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.postal || '—'}</td>
+                                    <td style={{ fontSize: 12, fontWeight: 700, color: r.block ? '#111' : '#d1d5db', whiteSpace: 'nowrap' }}>{r.block || '—'}</td>
+                                    <td style={{ fontSize: 12 }}>{r.name}</td>
+                                    <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{r.phone}</td>
+                                    {allVariants.map(v => <td key={v} className={`report-count${r[v] ? '' : ' zero'}`}>{r[v] || 0}</td>)}
+                                    <td className="report-row-total">{r.total}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="report-totals-row">
+                                <td colSpan={8}><strong>Total</strong></td>
+                                {allVariants.map(v => (
+                                  <td key={v} className="report-count"><strong>{llmRows.reduce((s, r) => s + (r[v] || 0), 0)}</strong></td>
+                                ))}
+                                <td className="report-row-total"><strong>{llmRows.reduce((s, r) => s + r.total, 0)}</strong></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* ── Delivery Sheet sub-tab ── */}
             {deliverySubTab === 'delivery-sheet' && (() => {
               const dsFiltered = reportOrders
@@ -3994,8 +4334,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
                         <button className="report-download-btn" onClick={() => {
                           const hdrs = ['#', ...(dsShowTag ? ['Tag'] : []), 'Address / Collection Point', 'Postal', ...(dsShowBlock ? ['Block / Unit'] : []), ...(dsShowType ? ['Type'] : []), ...(dsShowName ? ['Customer'] : []), ...(dsShowPhone ? ['Mobile No.'] : []), ...visibleVariants, 'Total'];
-                          const rows = deliveryRows.map((r, ri) => [ri + 1, ...(dsShowTag ? [r.tagName || ''] : []), r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim(), r.postal || '', ...(dsShowBlock ? [r.block || ''] : []), ...(dsShowType ? [r.type] : []), ...(dsShowName ? [r.name] : []), ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)]);
+                          const sourceRows = dsSelectedAddrs.size > 0 ? deliveryRows.filter(r => dsSelectedAddrs.has(r.addr)) : deliveryRows;
+                          const rows = sourceRows.map((r, ri) => [ri + 1, ...(dsShowTag ? [r.tagName || ''] : []), r.addr.replace(/,?\s*\d{5,6}\s*$/, '').replace(/,?\s*singapore\s*$/i, '').trim(), r.postal || '', ...(dsShowBlock ? [r.block || ''] : []), ...(dsShowType ? [r.type] : []), ...(dsShowName ? [r.name] : []), ...(dsShowPhone ? [r.phone] : []), ...visibleVariants.map(v => r[v] || 0), visibleVariants.reduce((s, v) => s + (r[v] || 0), 0)]);
                           rows.push(['', ...(dsShowTag ? [''] : []), 'TOTAL', '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(v => addresses.reduce((s, a) => s + (addressMap[a][v] || 0), 0)), addresses.reduce((s, a) => s + visibleVariants.reduce((ss, v) => ss + (addressMap[a][v] || 0), 0), 0)]);
+                          const distinctTags = [...new Set(sourceRows.map(r => r.tagName).filter(Boolean))];
+                          if (distinctTags.length > 0) {
+                            rows.push(['', ...(dsShowTag ? [''] : []), '', '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(() => ''), '']);
+                            rows.push(['Tags:', ...(dsShowTag ? [''] : []), distinctTags.join(', '), '', ...(dsShowBlock ? [''] : []), ...(dsShowType ? [''] : []), ...(dsShowName ? [''] : []), ...(dsShowPhone ? [''] : []), ...visibleVariants.map(() => ''), '']);
+                          }
                           downloadCSV(`delivery-sheet-${shipLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
@@ -4177,7 +4523,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               {/* Mobile number search — always visible */}
               <div className="orders-filter-row" style={{ paddingTop: 8, marginTop: 6, position: 'relative' }}>
                 <span className="filter-type-label"><strong>Mobile:</strong></span>
-                <div style={{ position: 'relative', flex: '0 0 220px' }}>
+                <div ref={phoneSearchRef} style={{ position: 'relative', flex: '0 0 220px' }}>
                   <input
                     type="text"
                     placeholder="Type 4+ digits to search…"
@@ -4761,6 +5107,8 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               );
             })()}
             </>
+
+
           </div>
         )}
 

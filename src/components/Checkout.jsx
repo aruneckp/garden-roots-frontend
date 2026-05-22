@@ -764,7 +764,62 @@ export default function Checkout() {
                   />
                 </div>
 
-                {/* Delivery address — postal code → area auto-detected → unit no */}
+                {/* Postal Code — shown right after mobile for home delivery */}
+                {deliveryType === 'delivery' && (
+                  <>
+                    {/* 1. Postal Code */}
+                    <div className="card-field">
+                      <label>Postal Code *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="e.g. 521234"
+                        value={deliveryPostalCode}
+                        onChange={e => {
+                          setDeliveryPostalCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                          setDeliveryFeeLoaded(false);
+                          setDeliveryArea('');
+                          setDeliveryStreet('');
+                        }}
+                        style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}
+                      />
+                      {deliveryPostalCode.length > 0 && deliveryPostalCode.length < 6 && (
+                        <span style={{ fontSize: 11, color: '#9CA3AF', display: 'block', marginTop: 4 }}>
+                          Enter all 6 digits
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 2. Auto-detected address + fee (shown once 6 digits entered) */}
+                    {deliveryPostalCode.length === 6 && (
+                      <div className="card-field">
+                        <SimpleDeliveryFee
+                          postalCode={deliveryPostalCode}
+                          cartTotal={cartTotal}
+                          onDeliveryFeeChange={handleDeliveryFeeChange}
+                          onAreaChange={setDeliveryArea}
+                          onStreetChange={setDeliveryStreet}
+                          onFreeThresholdChange={setFreeDeliveryThreshold}
+                          isFreeDelivery={qualifiesFreeDelivery}
+                        />
+                      </div>
+                    )}
+
+                    {/* 3. Auto-populated street address (editable in case user needs to correct) */}
+                    {deliveryStreet && (
+                      <div className="card-field">
+                        <label>Street Address <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(auto-filled)</span></label>
+                        <input
+                          value={deliveryStreet}
+                          onChange={e => setDeliveryStreet(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Delivery address — block/unit + previous address suggestions */}
                 {deliveryType === 'delivery' && (
                   <>
                     {/* Auto-fill banner — single previous address found */}
@@ -839,7 +894,7 @@ export default function Checkout() {
                       </div>
                     )}
 
-                    {/* 1. Unit / Block Number */}
+                    {/* Block / Unit Number */}
                     <div className="card-field">
                       <label>Block / Unit Number *</label>
                       <input
@@ -848,56 +903,6 @@ export default function Checkout() {
                         onChange={e => setDeliveryUnitNo(e.target.value)}
                       />
                     </div>
-
-                    {/* 2. Postal Code */}
-                    <div className="card-field">
-                      <label>Postal Code *</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        placeholder="e.g. 521234"
-                        value={deliveryPostalCode}
-                        onChange={e => {
-                          setDeliveryPostalCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                          setDeliveryFeeLoaded(false);
-                          setDeliveryArea('');
-                          setDeliveryStreet('');
-                        }}
-                        style={{ fontFamily: 'monospace', letterSpacing: '0.08em' }}
-                      />
-                      {deliveryPostalCode.length > 0 && deliveryPostalCode.length < 6 && (
-                        <span style={{ fontSize: 11, color: '#9CA3AF', display: 'block', marginTop: 4 }}>
-                          Enter all 6 digits
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 3. Auto-detected address + fee (shown once 6 digits entered) */}
-                    {deliveryPostalCode.length === 6 && (
-                      <div className="card-field">
-                        <SimpleDeliveryFee
-                          postalCode={deliveryPostalCode}
-                          cartTotal={cartTotal}
-                          onDeliveryFeeChange={handleDeliveryFeeChange}
-                          onAreaChange={setDeliveryArea}
-                          onStreetChange={setDeliveryStreet}
-                          onFreeThresholdChange={setFreeDeliveryThreshold}
-                          isFreeDelivery={qualifiesFreeDelivery}
-                        />
-                      </div>
-                    )}
-
-                    {/* 4. Auto-populated street address (editable in case user needs to correct) */}
-                    {deliveryStreet && (
-                      <div className="card-field">
-                        <label>Street Address <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(auto-filled)</span></label>
-                        <input
-                          value={deliveryStreet}
-                          onChange={e => setDeliveryStreet(e.target.value)}
-                        />
-                      </div>
-                    )}
                   </>
                 )}
 
