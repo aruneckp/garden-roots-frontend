@@ -3747,11 +3747,6 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                           const fromLoc = llmFromLocationId ? adminPickupLocations.find(l => l.id === llmFromLocationId) : null;
                           if (fromLoc) rows.push([fromLoc.address, fromLoc.name, fromLoc.phone || '', fromLoc.address.split(',')[0]?.trim() || '']);
                           sourceRows.forEach(r => rows.push([cleanAddr(r.addr), buildNameCell(r), r.phone, r.block || '']));
-                          const distinctTags = [...new Set(sourceRows.map(r => r.tagName).filter(Boolean))];
-                          if (distinctTags.length > 0) {
-                            rows.push(['', '', '', '']);
-                            rows.push(['Tags:', distinctTags.join(', '), '', '']);
-                          }
                           downloadCSV(`lalamove-${llmLabel}.csv`, hdrs, rows);
                         }}>⬇ Download CSV</button>
                       </div>
