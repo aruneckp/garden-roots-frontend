@@ -659,6 +659,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [llmPreviewMode, setLlmPreviewMode] = useState(false);
   const [llmItemLabels, setLlmItemLabels] = useState({}); // { variantName: shortLabel } — temp, no DB
   const [llmFromLocationId, setLlmFromLocationId] = useState(null);
+  const [llmTagFilter, setLlmTagFilter] = useState(new Set());
 
   const [typeSort, setTypeSort] = useState({ col: null, dir: 'asc' });
   const [typeOrderDrill, setTypeOrderDrill] = useState(null); // { variantName, status } | null
@@ -784,7 +785,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   useEffect(() => {
     if (activeTab !== 'delivery') return;
     if (deliverySubTab === 'delivery-sheet') { fetchReportOrders(); fetchDeliveryTags(); fetchShipments(); }
-    if (deliverySubTab === 'lalamove') { fetchReportOrders(); fetchShipments(); }
+    if (deliverySubTab === 'lalamove') { fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }
     if (deliverySubTab === 'boys') { fetchDeliveryBoys(); fetchUnassignedOrders(); fetchAssignedOrders(); fetchNullShipmentCount(); fetchShipments(); }
     if (deliverySubTab === 'tags') fetchDeliveryTags();
     if (deliverySubTab === 'csv-import') fetchDeliveryTags();
@@ -1552,6 +1553,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || d.detail || 'Failed'); }
       fetchDeliveryTags();
+      fetchReportOrders();
     } catch (err) {
       showToast('error', `Update tag failed: ${err.message}`);
     }
@@ -3561,11 +3563,17 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               const cleanAddr = addr => addr.replace(/,?\s*singapore\s*$/i, '').trim();
 
               // Filter: confirmed status, both delivery and pickup types (matches delivery sheet)
-              const llmOrders = reportOrders.filter(o =>
-                o.order_status === 'confirmed' &&
-                (o.delivery_address || o.pickup_location_address || o.pickup_location_name) &&
-                (llmShipmentFilter === 'all' || o.shipment_id === llmShipmentFilter)
-              );
+              const llmOrders = reportOrders.filter(o => {
+                if (o.order_status !== 'confirmed') return false;
+                if (!(o.delivery_address || o.pickup_location_address || o.pickup_location_name)) return false;
+                if (llmShipmentFilter !== 'all' && o.shipment_id !== llmShipmentFilter) return false;
+                if (llmTagFilter.size > 0) {
+                  if (llmTagFilter.has('untagged') && !o.delivery_tag_id) return true;
+                  if (llmTagFilter.has(String(o.delivery_tag_id))) return true;
+                  return false;
+                }
+                return true;
+              });
 
               const allVariants = [];
               llmOrders.forEach(o => {
@@ -3643,6 +3651,31 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                     {shipmentsWithOrders.map(s => (
                       <button key={s.id} className={`report-shipment-btn${llmShipmentFilter === s.id ? ' active' : ''}`} onClick={() => setLlmShipmentFilter(s.id)}>{s.shipment_ref}</button>
                     ))}
+                  </div>
+
+                  {/* Tag filter */}
+                  <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 70 }}>Tags:</span>
+                    <button
+                      className={`report-shipment-btn${llmTagFilter.size === 0 ? ' active' : ''}`}
+                      onClick={() => setLlmTagFilter(new Set())}
+                    >All</button>
+                    <button
+                      className={`report-shipment-btn${llmTagFilter.has('untagged') ? ' active' : ''}`}
+                      onClick={() => setLlmTagFilter(prev => { const n = new Set(prev); n.has('untagged') ? n.delete('untagged') : n.add('untagged'); return n; })}
+                    >🚫 Untagged</button>
+                    {deliveryTags.filter(t => t.is_active).map((t, i) => {
+                      const color = TAG_PALETTE[i % TAG_PALETTE.length];
+                      const isActive = llmTagFilter.has(String(t.id));
+                      return (
+                        <button
+                          key={t.id}
+                          className={`report-shipment-btn${isActive ? ' active' : ''}`}
+                          style={isActive ? { background: color + '22', color, border: `1px solid ${color}55` } : {}}
+                          onClick={() => setLlmTagFilter(prev => { const n = new Set(prev); n.has(String(t.id)) ? n.delete(String(t.id)) : n.add(String(t.id)); return n; })}
+                        >🏷️ {t.name}</button>
+                      );
+                    })}
                   </div>
 
                   {/* From address picker */}
