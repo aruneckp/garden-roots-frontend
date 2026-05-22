@@ -3560,10 +3560,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
               const stripStd = name => name ? name.split(/\s*[-–]\s*/)[0].trim() : name;
               const cleanAddr = addr => addr.replace(/,?\s*singapore\s*$/i, '').trim();
 
-              // Filter: confirmed status + has delivery address (includes self-collection converted to delivery)
+              // Filter: confirmed status, both delivery and pickup types (matches delivery sheet)
               const llmOrders = reportOrders.filter(o =>
                 o.order_status === 'confirmed' &&
-                o.delivery_address &&
+                (o.delivery_address || o.pickup_location_address || o.pickup_location_name) &&
                 (llmShipmentFilter === 'all' || o.shipment_id === llmShipmentFilter)
               );
 
@@ -3581,8 +3581,10 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
 
               const addressMap = {};
               llmOrders.forEach(o => {
-                const addr = o.delivery_address.trim();
-                const block = addr.split(',')[0]?.trim() || '';
+                const addr = o.delivery_type === 'pickup'
+                  ? (o.pickup_location_address || o.pickup_location_name || `Collection Point #${o.pickup_location_id}`)
+                  : o.delivery_address.trim();
+                const block = o.delivery_type === 'delivery' ? (addr.split(',')[0]?.trim() || '') : '';
                 if (!addressMap[addr]) addressMap[addr] = {
                   _name: o.customer_name || '', _phone: o.customer_phone || '',
                   _postal: extractPostal(addr), _block: block, _orderIds: [], _wt: {},
