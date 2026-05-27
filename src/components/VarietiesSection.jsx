@@ -53,7 +53,7 @@ export default function VarietiesSection() {
             const qty = cart.find(c => c.id === v.id)?.qty || 0;
             const disabled = v.is_active === 0;
             return (
-              <div className="variety-card" key={v.id}>
+              <div className={`variety-card${disabled ? ' variety-card--inactive' : ''}`} key={v.id}>
 
                 {/* ── Header: name + weight (right of name) + prices side by side ── */}
                 <div className="vc-header">
