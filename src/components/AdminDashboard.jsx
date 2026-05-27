@@ -497,14 +497,14 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [allOrders, setAllOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [orderFilters, setOrderFilters] = useState({
-    delivery_type: [], payment_status: [], order_status: [],
+    delivery_type: [], payment_status: [], order_status: ['confirmed'],
     pickup_location_id: [], delivery_boy_id: '', assigned: '',
     payment_method: [], date_from: '', date_to: '', tag_id: '',
   });
   const [activeFilters, setActiveFilters] = useState({
     delivery_type: false,
     payment_status: false,
-    order_status: false,
+    order_status: true,
     pickup_location_id: false,
     payment_method: false,
   });
@@ -643,7 +643,7 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [dsOrderBulkStatus, setDsOrderBulkStatus] = useState('');
   const [dsOrderBulkNote, setDsOrderBulkNote] = useState('');
   const [dsOrderBulkTag, setDsOrderBulkTag] = useState('');
-  const [dsStatusFilter, setDsStatusFilter] = useState(new Set());
+  const [dsStatusFilter, setDsStatusFilter] = useState(new Set(['confirmed']));
   const [dsShowPhone, setDsShowPhone] = useState(false);
   const [dsShowTag, setDsShowTag] = useState(false);
   const [dsShowBlock, setDsShowBlock] = useState(false);
