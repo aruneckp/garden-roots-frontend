@@ -4477,15 +4477,15 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
             <div className="manage-sub-nav" style={{ marginBottom: 20 }}>
               <button
                 className={`manage-sub-tab${reportSubTab === 'all-orders' ? ' active' : ''}`}
-                onClick={() => { setReportSubTab('all-orders'); fetchAllOrders(); fetchAdminPickupLocations(); }}
+                onClick={() => setReportSubTab('all-orders')}
               >📋 All Orders</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'orders-summary' ? ' active' : ''}`}
-                onClick={() => { setReportSubTab('orders-summary'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
+                onClick={() => setReportSubTab('orders-summary')}
               >Orders Summary</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'orders-by-type' ? ' active' : ''}`}
-                onClick={() => { setReportSubTab('orders-by-type'); fetchReportOrders(); fetchShipments(); fetchDeliveryTags(); }}
+                onClick={() => setReportSubTab('orders-by-type')}
               >Orders by Type</button>
               <button
                 className={`manage-sub-tab${reportSubTab === 'abandoned-orders' ? ' active' : ''}`}
