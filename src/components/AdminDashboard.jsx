@@ -625,6 +625,9 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
   const [selectedReportShipment, setSelectedReportShipment] = useState('all');
   const [reportTagFilter, setReportTagFilter] = useState(new Set());
   const [reportSubTab, setReportSubTab] = useState('all-orders');
+  const defaultReportDateFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 14); return d.toISOString().slice(0, 10); })();
+  const [reportDateFrom, setReportDateFrom] = useState(defaultReportDateFrom);
+  const [reportDateTo, setReportDateTo] = useState('');
   const [addressFilter, setAddressFilter] = useState('');
   const [showOrderFilters, setShowOrderFilters] = useState(false);
   const [phoneSearch, setPhoneSearch] = useState('');
@@ -1324,10 +1327,16 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
     finally { setAbandonedLoading(false); }
   };
 
-  const fetchReportOrders = async () => {
+  const fetchReportOrders = async (dateFrom, dateTo) => {
     setReportLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/orders`, { headers });
+      const params = new URLSearchParams();
+      const from = dateFrom !== undefined ? dateFrom : reportDateFrom;
+      const to   = dateTo   !== undefined ? dateTo   : reportDateTo;
+      if (from) params.set('date_from', from);
+      if (to)   params.set('date_to', to);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE}/api/v1/admin/orders${qs ? '?' + qs : ''}`, { headers });
       if (res.ok) setReportOrders(await res.json());
     } catch (_) {}
     finally { setReportLoading(false); }
@@ -5918,6 +5927,21 @@ export default function AdminDashboard({ onLogout, defaultTab }) {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                    <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Date:</span>
+                      <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)} className="orders-date-input" title="From" />
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>–</span>
+                      <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)} className="orders-date-input" title="To" />
+                      <button
+                        className="report-shipment-btn active"
+                        onClick={() => fetchReportOrders(reportDateFrom, reportDateTo)}
+                      >Apply</button>
+                      <button
+                        className="report-shipment-btn"
+                        style={{ color: '#6b7280' }}
+                        onClick={() => { setReportDateFrom(''); setReportDateTo(''); fetchReportOrders('', ''); }}
+                      >All time</button>
+                    </div>
                     <div className="report-shipment-filter-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', minWidth: 52 }}>Tags:</span>
                       <button
